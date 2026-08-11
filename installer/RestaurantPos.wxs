@@ -1,0 +1,22 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Restaurant POS"
+           Manufacturer="Restaurant POS"
+           Version="1.0.0"
+           UpgradeCode="{C2E1C6F0-50E9-43DC-95E5-03B7B43574B7}"
+           Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Restaurant POS is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Restaurant POS" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Restaurant POS" Level="1">
+      <Component Id="ApplicationFiles" Directory="INSTALLFOLDER" Bitness="always64">
+        <File Id="RestaurantPosExecutable" Source="$(var.PublishDir)\RestaurantPos.Desktop.exe" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Restaurant POS" WorkingDirectory="INSTALLFOLDER" />
+        </File>
+      </Component>
+    </Feature>
+  </Package>
+</Wix>

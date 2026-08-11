@@ -1,0 +1,38 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Tt]est[Rr]esults/
+
+# Visual Studio, Rider, and user-specific settings
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Local application data and SQLite runtime files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+Backups/
+Logs/
+logs/
+
+# Local configuration and diagnostics
+appsettings.Local.json
+appsettings.Development.json
+*.log
+*.tmp
+
+# Publishing and installer tooling
+publish/
+installer/.wix/
+*.wixpdb
+*.msi

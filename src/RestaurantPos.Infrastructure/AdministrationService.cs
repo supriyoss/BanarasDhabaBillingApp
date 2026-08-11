@@ -1,0 +1,53 @@
+using Microsoft.EntityFrameworkCore;
+using RestaurantPos.Application;
+using RestaurantPos.Domain;
+
+namespace RestaurantPos.Infrastructure;
+
+public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinHasher) : IAdministrationService
+{
+    public async Task<IReadOnlyList<AppUser>> GetStaffAsync(CancellationToken cancellationToken = default) => await db.Users.OrderBy(x => x.DisplayName).ToListAsync(cancellationToken);
+    public async Task<AppUser> AddStaffAsync(string displayName, string pin, UserRole role, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        displayName = displayName.Trim();
+        if (string.IsNullOrWhiteSpace(displayName) || pin.Length < 4) throw new InvalidOperationException("Enter a staff name and a PIN of at least four digits.");
+        if (role == UserRole.Admin) throw new InvalidOperationException("New administrator accounts cannot be created from this screen.");
+        if (await db.Users.AnyAsync(x => x.DisplayName == displayName, cancellationToken)) throw new InvalidOperationException("A staff member with that name already exists.");
+        var user = new AppUser { DisplayName = displayName, PinHash = pinHasher.Hash(pin), Role = role };
+        db.Users.Add(user); db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Created, EntityType = "User", EntityId = displayName, Detail = $"Created {role} staff account." });
+        await db.SaveChangesAsync(cancellationToken); return user;
+    }
+    public async Task ChangePinAsync(int userId, string currentPin, string newPin, CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users.FindAsync([userId], cancellationToken) ?? throw new InvalidOperationException("Staff account was not found.");
+        if (!pinHasher.Verify(currentPin, user.PinHash)) throw new InvalidOperationException("The current PIN is not correct.");
+        if (newPin.Length < 4) throw new InvalidOperationException("The new PIN must contain at least four digits.");
+        user.PinHash = pinHasher.Hash(newPin); db.AuditEntries.Add(new AuditEntry { UserId = userId, Action = AuditAction.Updated, EntityType = "User", EntityId = user.Id.ToString(), Detail = "Changed own PIN." });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+    public async Task<IReadOnlyList<MenuCategory>> GetCategoriesAsync(CancellationToken cancellationToken = default) => await db.MenuCategories.Where(x => x.IsActive).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+    public async Task<MenuItem> AddMenuItemAsync(int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        name = name.Trim();
+        if (string.IsNullOrWhiteSpace(name) || price < 0) throw new InvalidOperationException("Enter a menu item name and price.");
+        if (!await db.MenuCategories.AnyAsync(x => x.Id == categoryId && x.IsActive, cancellationToken)) throw new InvalidOperationException("Select an active category.");
+        var item = new MenuItem { MenuCategoryId = categoryId, Name = name, UnitPrice = price, GstRate = 0, SortOrder = await db.MenuItems.Where(x => x.MenuCategoryId == categoryId).CountAsync(cancellationToken) + 1 };
+        db.MenuItems.Add(item); db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Created, EntityType = "MenuItem", EntityId = name, Detail = "Added menu item." });
+        await db.SaveChangesAsync(cancellationToken); return item;
+    }
+    public async Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default) => await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
+    public async Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        if (gstRate < 0 || gstRate > 100) throw new InvalidOperationException("Enter a GST rate between 0 and 100.");
+        var settings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
+        settings.GstRate = gstRate; settings.UpdatedUtc = DateTime.UtcNow;
+        db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "RestaurantSettings", EntityId = "GST", Detail = $"Updated bill GST rate to {gstRate:N2}%." });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+    public async Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default)
+    {
+        var start = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Local).ToUniversalTime();
+        var end = start.AddDays(1);
+        return await db.Orders.Include(x => x.DiningTable).Include(x => x.CreatedByUser).Where(x => x.Status == OrderStatus.Paid && x.ClosedUtc >= start && x.ClosedUtc < end).OrderByDescending(x => x.ClosedUtc).ToListAsync(cancellationToken);
+    }
+}
