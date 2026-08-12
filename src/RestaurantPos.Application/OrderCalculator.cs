@@ -25,14 +25,16 @@ public sealed class OrderCalculator : IOrderCalculator
         {
             var line = order.Lines.ElementAt(index);
             var baseAmount = Round(line.UnitPrice * line.Quantity);
-            var lineDiscount = index == order.Lines.Count - 1 ? discount - allocatedDiscount : Round(discount * baseAmount / subtotal);
+            var lineDiscount = subtotal == 0
+                ? 0
+                : index == order.Lines.Count - 1
+                    ? discount - allocatedDiscount
+                    : Round(discount * baseAmount / subtotal);
             allocatedDiscount += lineDiscount;
-            line.DiscountType = DiscountType.None;
-            line.DiscountValue = 0;
             var taxable = baseAmount - lineDiscount;
             line.GstRate = order.GstRate;
             line.TaxAmount = Round(taxable * order.GstRate / 100m);
-            line.LineTotal = taxable;
+            line.LineTotal = baseAmount;
             tax += line.TaxAmount;
         }
         return new OrderTotals(subtotal, Round(discount), Round(tax), Round(subtotal - discount + tax));

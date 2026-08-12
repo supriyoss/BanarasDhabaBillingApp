@@ -2,6 +2,7 @@ using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
 using RestaurantPos.Application;
 using RestaurantPos.Domain;
 
@@ -16,17 +17,98 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
         {
             var dialog = new PrintDialog();
             if (dialog.ShowDialog() != true) return;
-            var document = new FlowDocument { PagePadding = new Thickness(10), FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 10, PageWidth = dialog.PrintableAreaWidth, PageHeight = dialog.PrintableAreaHeight };
-            document.Blocks.Add(new Paragraph(new Run("RESTAURANT POS")) { Margin = new Thickness(0), TextAlignment = TextAlignment.Center, FontSize = 15, FontWeight = FontWeights.Bold });
-            document.Blocks.Add(new Paragraph(new Run(isReprint ? "INVOICE REPRINT" : "TAX INVOICE")) { Margin = new Thickness(0, 2, 0, 6), TextAlignment = TextAlignment.Center });
-            document.Blocks.Add(new Paragraph(new Run($"Invoice: {order.InvoiceNumber}\nDate: {(order.ClosedUtc ?? order.OpenedUtc).ToLocalTime():dd MMM yyyy HH:mm}\nServer: {order.ServerName}\nType: {order.Type}")) { Margin = new Thickness(0, 0, 0, 6) });
-            foreach (var line in order.Lines) document.Blocks.Add(new Paragraph(new Run($"{line.ItemName}\n{line.Quantity:N0} x {line.UnitPrice:N2} = {line.LineTotal:N2}")) { Margin = new Thickness(0, 1, 0, 1) });
-            document.Blocks.Add(new Paragraph(new Run($"Bill discount: {order.DiscountAmount:N2}\nGST ({order.GstRate:N2}%): {order.TaxAmount:N2}\nTOTAL: {order.GrandTotal:N2}")) { Margin = new Thickness(0, 6, 0, 0), FontWeight = FontWeights.Bold, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 8, 0, 0) });
-            if (order.Payments.Count > 0) document.Blocks.Add(new Paragraph(new Run($"Payment: {string.Join(", ", order.Payments.Select(x => $"{x.Method} {x.Amount:N2}"))}")) { Margin = new Thickness(0, 6, 0, 0) });
-            document.Blocks.Add(new Paragraph(new Run("Thank you for dining with us.")) { TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 12, 0, 0) });
+
+            var receiptWidth = Math.Min(dialog.PrintableAreaWidth, 280d);
+            var document = new FlowDocument
+            {
+                PagePadding = new Thickness(6),
+                FontFamily = new FontFamily("Arial"),
+                FontSize = 9,
+                PageWidth = receiptWidth,
+                PageHeight = dialog.PrintableAreaHeight,
+                ColumnWidth = double.PositiveInfinity
+            };
+
+            document.Blocks.Add(Paragraph("RESTAURANT POS", TextAlignment.Center, FontWeights.Bold, 12));
+            document.Blocks.Add(Paragraph(isReprint ? "INVOICE REPRINT" : "TAX INVOICE", TextAlignment.Center, FontWeights.Bold, margin: new Thickness(0, 1, 0, 7)));
+
+            var receiptDate = (order.ClosedUtc ?? order.OpenedUtc).ToLocalTime();
+            document.Blocks.Add(DetailsTable(
+                $"Invoice: {order.InvoiceNumber}", $"Type: {order.Type}",
+                $"Date: {receiptDate:dd-MM-yyyy}", $"Time: {receiptDate:HH:mm}"));
+            document.Blocks.Add(Paragraph($"Server: {order.ServerName}", margin: new Thickness(0, 0, 0, 5)));
+
+            var items = new Table { CellSpacing = 0, Margin = new Thickness(0) };
+            items.Columns.Add(new TableColumn { Width = new GridLength(50, GridUnitType.Star) });
+            items.Columns.Add(new TableColumn { Width = new GridLength(14, GridUnitType.Star) });
+            items.Columns.Add(new TableColumn { Width = new GridLength(36, GridUnitType.Star) });
+            var rows = new TableRowGroup();
+            rows.Rows.Add(ItemRow("Item", "Qty", "Amount", true));
+            foreach (var line in order.Lines)
+                rows.Rows.Add(ItemRow(line.ItemName, FormatQuantity(line.Quantity), $"{line.LineTotal:N2}"));
+            items.RowGroups.Add(rows);
+            document.Blocks.Add(items);
+
+            var subtotal = decimal.Round(order.Lines.Sum(x => x.UnitPrice * x.Quantity), 2, MidpointRounding.AwayFromZero);
+            document.Blocks.Add(Paragraph($"Subtotal: {subtotal:N2}", TextAlignment.Right, margin: new Thickness(0, 5, 0, 0)));
+            if (order.DiscountAmount > 0)
+                document.Blocks.Add(Paragraph($"Bill Discount: {order.DiscountAmount:N2}", TextAlignment.Right));
+            document.Blocks.Add(Paragraph($"GST/Tax ({order.GstRate:N2}%): {order.TaxAmount:N2}", TextAlignment.Right));
+            document.Blocks.Add(Paragraph($"Total Amount: {order.GrandTotal:N2}", TextAlignment.Center, FontWeights.Bold, 11, new Thickness(0, 7, 0, 0)));
+
+            if (order.Payments.Count > 0)
+                document.Blocks.Add(Paragraph($"Payment: {string.Join(", ", order.Payments.Select(x => $"{x.Method} {x.Amount:N2}"))}", TextAlignment.Center, margin: new Thickness(0, 3, 0, 0)));
+
+            document.Blocks.Add(Paragraph("Thank you for dining with us", TextAlignment.Center, FontWeights.Bold, margin: new Thickness(0, 5, 0, 0)));
             dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, $"Invoice {order.InvoiceNumber}");
             printed = true;
         });
         return Task.FromResult(printed);
     }
+
+    private static Paragraph Paragraph(string text, TextAlignment alignment = TextAlignment.Left, FontWeight? weight = null,
+        double fontSize = 9, Thickness? margin = null) => new(new Run(text))
+        {
+            Margin = margin ?? new Thickness(0, 1, 0, 1),
+            TextAlignment = alignment,
+            FontWeight = weight ?? FontWeights.Normal,
+            FontSize = fontSize
+        };
+
+    private static TableRow ItemRow(string item, string quantity, string amount, bool header = false)
+    {
+        var row = new TableRow { FontWeight = header ? FontWeights.SemiBold : FontWeights.Normal };
+        row.Cells.Add(Cell(item));
+        row.Cells.Add(Cell(quantity, TextAlignment.Center));
+        row.Cells.Add(Cell(amount, TextAlignment.Right));
+        return row;
+    }
+
+    private static Table DetailsTable(string firstLeft, string firstRight, string secondLeft, string secondRight)
+    {
+        var table = new Table { CellSpacing = 0, Margin = new Thickness(0) };
+        table.Columns.Add(new TableColumn { Width = new GridLength(62, GridUnitType.Star) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(38, GridUnitType.Star) });
+        var rows = new TableRowGroup();
+        rows.Rows.Add(DetailRow(firstLeft, firstRight));
+        rows.Rows.Add(DetailRow(secondLeft, secondRight));
+        table.RowGroups.Add(rows);
+        return table;
+    }
+
+    private static TableRow DetailRow(string left, string right)
+    {
+        var row = new TableRow();
+        row.Cells.Add(Cell(left));
+        row.Cells.Add(Cell(right));
+        return row;
+    }
+
+    private static TableCell Cell(string text, TextAlignment alignment = TextAlignment.Left) => new(new Paragraph(new Run(text))
+    {
+        Margin = new Thickness(0, 2, 0, 2),
+        TextAlignment = alignment
+    });
+
+    private static string FormatQuantity(decimal quantity) => quantity % 1m == 0 ? quantity.ToString("N0") : quantity.ToString("0.##");
 }

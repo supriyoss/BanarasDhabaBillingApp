@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantPos.Infrastructur
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantPos.Desktop", "src\RestaurantPos.Desktop\RestaurantPos.Desktop.csproj", "{AA597B7A-8FB1-49E4-9B03-95B9E5D4F769}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantPos.Tests", "tests\RestaurantPos.Tests\RestaurantPos.Tests.csproj", "{BE66D4F1-43F5-4B7D-9CE5-EA32AF010817}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,5 +34,9 @@ Global
 		{AA597B7A-8FB1-49E4-9B03-95B9E5D4F769}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AA597B7A-8FB1-49E4-9B03-95B9E5D4F769}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AA597B7A-8FB1-49E4-9B03-95B9E5D4F769}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE66D4F1-43F5-4B7D-9CE5-EA32AF010817}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE66D4F1-43F5-4B7D-9CE5-EA32AF010817}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE66D4F1-43F5-4B7D-9CE5-EA32AF010817}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE66D4F1-43F5-4B7D-9CE5-EA32AF010817}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
