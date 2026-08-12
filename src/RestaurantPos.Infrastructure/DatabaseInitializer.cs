@@ -8,6 +8,7 @@ public sealed class DatabaseInitializer(RestaurantDbContext db, PinHasher pinHas
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await db.Database.MigrateAsync(cancellationToken);
+        await db.Orders.Where(x => x.Status == OrderStatus.Held).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, OrderStatus.Open), cancellationToken);
         if (!await db.RestaurantSettings.AnyAsync(cancellationToken)) { db.RestaurantSettings.Add(new RestaurantSettings { Id = 1, GstRate = 5m }); await db.SaveChangesAsync(cancellationToken); }
         var administrator = await db.Users.SingleOrDefaultAsync(x => x.DisplayName == "Administrator", cancellationToken);
         if (administrator is null)
@@ -20,13 +21,39 @@ public sealed class DatabaseInitializer(RestaurantDbContext db, PinHasher pinHas
             administrator.PinHash = pinHasher.Hash("1234");
             await db.SaveChangesAsync(cancellationToken);
         }
+        var manager = await db.Users.SingleOrDefaultAsync(x => x.DisplayName == "Manager", cancellationToken);
+        if (manager is null)
+        {
+            db.Users.Add(new AppUser { DisplayName = "Manager", PinHash = pinHasher.Hash("9231"), Role = UserRole.Manager });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else if (manager.PinHash == "REPLACE_DURING_SETUP")
+        {
+            manager.PinHash = pinHasher.Hash("9231"); manager.Role = UserRole.Manager; manager.IsActive = true;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        var defaultLayout = await db.FloorLayouts.OrderBy(x => x.SortOrder).FirstOrDefaultAsync(cancellationToken);
+        if (defaultLayout is null)
+        {
+            defaultLayout = new FloorLayout { Name = "Main Floor", SortOrder = 1, IsDefault = true };
+            db.FloorLayouts.Add(defaultLayout);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        var unplacedTables = await db.DiningTables.Where(x => x.FloorLayoutId == null).OrderBy(x => x.Id).ToListAsync(cancellationToken);
+        for (var index = 0; index < unplacedTables.Count; index++)
+        {
+            unplacedTables[index].FloorLayoutId = defaultLayout.Id;
+            unplacedTables[index].GridX = index % 4;
+            unplacedTables[index].GridY = index / 4;
+        }
+        if (unplacedTables.Count > 0) await db.SaveChangesAsync(cancellationToken);
         if (await db.MenuCategories.AnyAsync(cancellationToken)) return;
         var starters = new MenuCategory { Name = "Starters", SortOrder = 1 };
         var mains = new MenuCategory { Name = "Mains", SortOrder = 2 };
         var beverages = new MenuCategory { Name = "Beverages", SortOrder = 3 };
         db.MenuCategories.AddRange(starters, mains, beverages);
         db.MenuItems.AddRange(new MenuItem { MenuCategory = starters, Name = "Paneer Tikka", UnitPrice = 240, GstRate = 5, SortOrder = 1 }, new MenuItem { MenuCategory = mains, Name = "Veg Biryani", UnitPrice = 220, GstRate = 5, SortOrder = 1 }, new MenuItem { MenuCategory = beverages, Name = "Masala Chai", UnitPrice = 40, GstRate = 5, SortOrder = 1 });
-        db.DiningTables.AddRange(Enumerable.Range(1, 8).Select(n => new DiningTable { Name = $"Table {n}", Capacity = 4 }));
+        db.DiningTables.AddRange(Enumerable.Range(1, 8).Select(n => new DiningTable { Name = $"Table {n}", Capacity = 4, FloorLayoutId = defaultLayout.Id, GridX = (n - 1) % 4, GridY = (n - 1) / 4 }));
         await db.SaveChangesAsync(cancellationToken);
     }
 }

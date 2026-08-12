@@ -6,6 +6,29 @@ namespace RestaurantPos.Infrastructure;
 
 public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calculator) : IOrderWorkflow
 {
+    public async Task<Order> OpenTableAsync(int tableId, int userId, string serverName, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var tableExists = await db.DiningTables.AnyAsync(x => x.Id == tableId && x.IsActive, cancellationToken);
+        if (!tableExists) throw new InvalidOperationException("This dining table is unavailable.");
+
+        var existing = await db.Orders.Include(x => x.Lines).Include(x => x.Payments)
+            .Where(x => x.Type == OrderType.DineIn && x.DiningTableId == tableId &&
+                (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held))
+            .OrderByDescending(x => x.OpenedUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is null) return await CreateAsync(OrderType.DineIn, tableId, userId, serverName, cancellationToken);
+
+        if (existing.Status == OrderStatus.Held)
+        {
+            existing.Status = OrderStatus.Open;
+            Recalculate(existing);
+            AddAudit(userId, AuditAction.Resumed, "Order", existing.InvoiceNumber, "Reopened from its dining table.");
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return existing;
+    }
+
     public async Task<Order> CreateAsync(OrderType type, int? tableId, int userId, string serverName, CancellationToken cancellationToken = default)
     {
         await EnsureOperationalUserAsync(userId, cancellationToken);
@@ -66,28 +89,30 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         return await LoadAsync(orderId, cancellationToken);
     }
 
-    public async Task<Order> HoldAsync(int orderId, int userId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Order>> GetOpenTakeawayOrdersAsync(CancellationToken cancellationToken = default) =>
+        await db.Orders.Include(x => x.Lines).Include(x => x.Payments)
+            .Where(x => x.Type == OrderType.Takeaway && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held))
+            .OrderByDescending(x => x.OpenedUtc).ToListAsync(cancellationToken);
+
+    public async Task<Order> OpenTakeawayAsync(int orderId, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var order = await db.Orders.Include(x => x.Lines).Include(x => x.Payments)
+            .SingleOrDefaultAsync(x => x.Id == orderId && x.Type == OrderType.Takeaway && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held), cancellationToken)
+            ?? throw new InvalidOperationException("The takeaway order is no longer open.");
+        if (order.Status == OrderStatus.Held) { order.Status = OrderStatus.Open; Recalculate(order); AddAudit(userId, AuditAction.Resumed, "Order", order.InvoiceNumber, "Reopened from takeaway queue."); await db.SaveChangesAsync(cancellationToken); }
+        return order;
+    }
+
+    public async Task<Order> SetBillRequestedAsync(int orderId, bool requested, int userId, CancellationToken cancellationToken = default)
     {
         await EnsureOperationalUserAsync(userId, cancellationToken);
         var order = await LoadOpenAsync(orderId, cancellationToken);
-        order.Status = OrderStatus.Held;
-        AddAudit(userId, AuditAction.Held, "Order", order.InvoiceNumber, "Order held.");
-        await db.SaveChangesAsync(cancellationToken); return await LoadAsync(orderId, cancellationToken);
+        if (order.Type != OrderType.DineIn) throw new InvalidOperationException("Bill requests apply only to dine-in tables.");
+        order.BillRequested = requested;
+        AddAudit(userId, AuditAction.Updated, "Order", order.InvoiceNumber, requested ? "Table requested the bill." : "Cleared table bill request.");
+        await db.SaveChangesAsync(cancellationToken); return order;
     }
-
-    public async Task<Order> ResumeAsync(int orderId, int userId, CancellationToken cancellationToken = default)
-    {
-        await EnsureOperationalUserAsync(userId, cancellationToken);
-        var order = await LoadAsync(orderId, cancellationToken);
-        if (order.Status != OrderStatus.Held) throw new InvalidOperationException("Only held orders can be resumed.");
-        order.Status = OrderStatus.Open;
-        Recalculate(order);
-        AddAudit(userId, AuditAction.Resumed, "Order", order.InvoiceNumber, "Order resumed.");
-        await db.SaveChangesAsync(cancellationToken); return await LoadAsync(orderId, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Order>> GetHeldOrdersAsync(CancellationToken cancellationToken = default) =>
-        await db.Orders.Include(x => x.DiningTable).Include(x => x.Lines).Where(x => x.Status == OrderStatus.Held).OrderBy(x => x.OpenedUtc).ToListAsync(cancellationToken);
 
     public async Task<Order> TakePaymentAsync(int orderId, PaymentMethod method, decimal amount, int userId, CancellationToken cancellationToken = default)
     {
@@ -97,7 +122,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         var due = order.GrandTotal - order.Payments.Sum(p => p.Amount);
         if (amount != due) throw new InvalidOperationException($"Payment must equal the amount due: {due:N2}.");
         order.Payments.Add(new Payment { Method = method, Amount = amount });
-        order.Status = OrderStatus.Paid; order.ClosedUtc = DateTime.UtcNow;
+        order.Status = OrderStatus.Paid; order.BillRequested = false; order.ClosedUtc = DateTime.UtcNow;
         AddAudit(userId, AuditAction.Paid, "Order", order.InvoiceNumber, $"Paid {amount:N2} by {method}.");
         await db.SaveChangesAsync(cancellationToken); return await LoadAsync(orderId, cancellationToken);
     }

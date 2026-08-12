@@ -32,6 +32,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public MainWindow(IServiceScopeFactory scopeFactory, UserSession session, LocalBackupScheduler backupScheduler)
     {
         InitializeComponent(); this.scopeFactory = scopeFactory; this.session = session; this.backupScheduler = backupScheduler; DataContext = this;
+        if (TableSelectionPanel.Parent is FrameworkElement legacyOrderStartPanel) legacyOrderStartPanel.Visibility = Visibility.Collapsed;
+        HeldOrdersNavButton.Content = "Open takeaways";
+        UpdateTakeawayQueueLabels();
+        if (LeaveOrderButton.Parent is System.Windows.Controls.Panel orderActions)
+        {
+            var requestBill = new System.Windows.Controls.Button { Content = "Request bill" };
+            requestBill.Click += RequestBill_Click; orderActions.Children.Add(requestBill);
+        }
         GstRateInput.AcceptsReturn = false;
         GstRateInput.TextWrapping = TextWrapping.NoWrap;
         GstRateInput.Padding = new Thickness(0);
@@ -53,28 +61,38 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SelectPaymentMethod(PaymentMethod.Cash);
         BusinessDate.SelectedDate = DateTime.Today;
         StaffText.Text = $"Current order - {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role})";
+        HomeStaffText.Text = $"Signed in as {session.CurrentUser.DisplayName} ({session.CurrentUser.Role})";
         ServerNameInput.Text = session.CurrentUser.DisplayName;
-        AdminNavButton.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
-        ReportsNavButton.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
-        MenuManagementNavButton.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
+        var isRestaurantManager = session.CurrentUser.Role == UserRole.Manager;
+        AdminNavButton.Visibility = IsAdministrator || isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
+        AdminNavButton.Content = IsAdministrator ? "Application" : "Restaurant";
+        ReportsNavButton.Visibility = isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
+        MenuManagementNavButton.Visibility = isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
         BackupNavButton.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
         OfflineReadyIndicator.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
         PosNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
+        HomeNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
+        FloorPlanEditorButton.Visibility = session.CurrentUser.Role == UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
         HeldOrdersNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
         HistoryFromDate.SelectedDate = DateTime.Today;
-        if (IsAdministrator) { ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
-        else { ShowScreen(PosScreen); StatusText.Text = "Choose a table tile for dine-in, or start a takeaway order."; }
+        if (IsAdministrator) ShowScreen(ApplicationMaintenanceScreen);
+        else { ShowScreen(HomeScreen); StatusText.Text = "Choose Dining or Takeaway from Home."; }
     }
 
+    private void ShowHome_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) ShowScreen(HomeScreen); }
     private void ShowPos_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) ShowScreen(PosScreen); }
     private async void ShowHeldOrders_Click(object sender, RoutedEventArgs e) { if (IsAdministrator) return; ShowScreen(HeldOrdersScreen); await LoadHeldOrdersAsync(); }
-    private async void ShowReports_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) return; ShowScreen(ReportsScreen); await LoadReportAsync(); }
-    private async void ShowMenuManagement_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) return; ShowScreen(MenuManagementScreen); await LoadMenuManagementAsync(); }
-    private async void ShowAdmin_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Admin) return; ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
+    private async void ShowReports_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager) return; ShowScreen(ReportsScreen); await LoadReportAsync(); }
+    private async void ShowMenuManagement_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager) return; ShowScreen(MenuManagementScreen); await LoadMenuManagementAsync(); }
+    private async void ShowAdmin_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); return; }
+        if (session.CurrentUser?.Role == UserRole.Manager) { ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
+    }
     private void ShowScreen(FrameworkElement screen)
     {
-        PosScreen.Visibility = screen == PosScreen ? Visibility.Visible : Visibility.Collapsed; HeldOrdersScreen.Visibility = screen == HeldOrdersScreen ? Visibility.Visible : Visibility.Collapsed; ReportsScreen.Visibility = screen == ReportsScreen ? Visibility.Visible : Visibility.Collapsed; MenuManagementScreen.Visibility = screen == MenuManagementScreen ? Visibility.Visible : Visibility.Collapsed; AdminScreen.Visibility = screen == AdminScreen ? Visibility.Visible : Visibility.Collapsed;
-        SetActiveNavigation(PosNavButton, screen == PosScreen); SetActiveNavigation(HeldOrdersNavButton, screen == HeldOrdersScreen); SetActiveNavigation(ReportsNavButton, screen == ReportsScreen); SetActiveNavigation(MenuManagementNavButton, screen == MenuManagementScreen); SetActiveNavigation(AdminNavButton, screen == AdminScreen);
+        HomeScreen.Visibility = screen == HomeScreen ? Visibility.Visible : Visibility.Collapsed; PosScreen.Visibility = screen == PosScreen ? Visibility.Visible : Visibility.Collapsed; HeldOrdersScreen.Visibility = screen == HeldOrdersScreen ? Visibility.Visible : Visibility.Collapsed; ReportsScreen.Visibility = screen == ReportsScreen ? Visibility.Visible : Visibility.Collapsed; MenuManagementScreen.Visibility = screen == MenuManagementScreen ? Visibility.Visible : Visibility.Collapsed; AdminScreen.Visibility = screen == AdminScreen ? Visibility.Visible : Visibility.Collapsed; ApplicationMaintenanceScreen.Visibility = screen == ApplicationMaintenanceScreen ? Visibility.Visible : Visibility.Collapsed;
+        SetActiveNavigation(HomeNavButton, screen == HomeScreen); SetActiveNavigation(PosNavButton, screen == PosScreen); SetActiveNavigation(HeldOrdersNavButton, screen == HeldOrdersScreen); SetActiveNavigation(ReportsNavButton, screen == ReportsScreen); SetActiveNavigation(MenuManagementNavButton, screen == MenuManagementScreen); SetActiveNavigation(AdminNavButton, screen == AdminScreen || screen == ApplicationMaintenanceScreen);
     }
     private static void SetActiveNavigation(System.Windows.Controls.Button button, bool isActive)
     {
@@ -82,7 +100,43 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         button.Foreground = isActive ? Brushes.White : new SolidColorBrush(Color.FromRgb(203, 213, 225));
     }
     private void Logout_Click(object sender, RoutedEventArgs e) => (System.Windows.Application.Current as App)?.Logout();
-    private async void BackupNow_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) return; try { await backupScheduler.CreateNowAsync(); AdminStatusText.Text = "Local backup created."; } catch (Exception ex) { AdminStatusText.Text = ex.Message; } }
+    private void UpdateTakeawayQueueLabels()
+    {
+        foreach (var element in LogicalDescendants(HeldOrdersScreen))
+        {
+            if (element is System.Windows.Controls.TextBlock text && text.Text == "Held orders") text.Text = "Open takeaway orders";
+            else if (element is System.Windows.Controls.TextBlock description && description.Text.StartsWith("Resume a saved bill")) description.Text = "Open an unfinished takeaway order or start a new one from Home.";
+            else if (element is System.Windows.Controls.Button button && Equals(button.Content, "Resume selected order")) button.Content = "Open selected order";
+        }
+    }
+    private static IEnumerable<DependencyObject> LogicalDescendants(DependencyObject parent)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+        { yield return child; foreach (var descendant in LogicalDescendants(child)) yield return descendant; }
+    }
+    private async void BackupNow_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) return; try { await backupScheduler.CreateNowAsync(); ApplicationStatusText.Text = "Local database backup created."; } catch (Exception ex) { ApplicationStatusText.Text = ex.Message; } }
+    private void EditFloorPlan_Click(object sender, RoutedEventArgs e)
+    {
+        if (session.CurrentUser?.Role != UserRole.Manager) return;
+        using var scope = scopeFactory.CreateScope();
+        var editor = scope.ServiceProvider.GetRequiredService<FloorPlanEditorWindow>();
+        editor.Owner = this;
+        editor.ShowDialog();
+    }
+
+    private async void HomeDining_Click(object sender, RoutedEventArgs e) => await OpenDiningFloorAsync();
+    private async Task OpenDiningFloorAsync()
+    {
+        using var scope = scopeFactory.CreateScope();
+        var floorPlan = scope.ServiceProvider.GetRequiredService<FloorPlanWindow>(); floorPlan.Owner = this;
+        if (floorPlan.ShowDialog() == true && floorPlan.SelectedTableId is int tableId) await OpenTableOrderAsync(tableId);
+    }
+
+    private async void HomeTakeaway_Click(object sender, RoutedEventArgs e)
+    {
+        ShowScreen(PosScreen);
+        await StartTakeawayAsync();
+    }
 
     private void BeginDineIn_Click(object sender, RoutedEventArgs e)
     {
@@ -96,9 +150,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (!choosingDineIn || TableSelector.SelectedItem is not DiningTable table) return;
         choosingDineIn = false;
-        await CreateOrderAsync(OrderType.DineIn, table.Id);
+        await OpenTableOrderAsync(table.Id);
+    }
+
+    private async Task OpenTableOrderAsync(int tableId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
+                .OpenTableAsync(tableId, session.CurrentUser!.Id, ServerNameInput.Text);
+            invoicePrintedForCurrentOrder = false;
+            ShowScreen(PosScreen);
+            RefreshOrder(currentOrder.Lines.Count == 0 ? "Table opened. Add menu items." : "Existing table order opened.");
+        }
+        catch (Exception ex) { ShowError(ex); }
     }
     private async void TakeawayOrder_Click(object sender, RoutedEventArgs e)
+        => await StartTakeawayAsync();
+
+    private async Task StartTakeawayAsync()
     {
         choosingDineIn = false;
         TableSelector.SelectedItem = null;
@@ -109,14 +180,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     private async Task CreateOrderAsync(OrderType type, int? tableId)
     {
-        if (IsAdministrator) { ShowScreen(AdminScreen); AdminStatusText.Text = "Administrator accounts cannot create orders."; return; }
+        if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); ApplicationStatusText.Text = "Application administrators cannot create restaurant orders."; return; }
         try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CreateAsync(type, tableId, session.CurrentUser!.Id, ServerNameInput.Text); invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Order created. Add menu items."); }
         catch (Exception ex) { ShowError(ex); }
     }
 
     private async Task LoadHeldOrdersAsync()
     {
-        try { using var scope = scopeFactory.CreateScope(); HeldOrdersGrid.ItemsSource = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().GetHeldOrdersAsync(); }
+        try { using var scope = scopeFactory.CreateScope(); HeldOrdersGrid.ItemsSource = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().GetOpenTakeawayOrdersAsync(); }
         catch (Exception ex) { ShowError(ex); }
     }
     private async void RefreshHeldOrders_Click(object sender, RoutedEventArgs e) => await LoadHeldOrdersAsync();
@@ -125,7 +196,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async Task ResumeSelectedHeldOrderAsync()
     {
         if (HeldOrdersGrid.SelectedItem is not Order order) return;
-        try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().ResumeAsync(order.Id, session.CurrentUser!.Id); invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Held order resumed."); }
+        try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().OpenTakeawayAsync(order.Id, session.CurrentUser!.Id); invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Takeaway order opened."); }
         catch (Exception ex) { ShowError(ex); }
     }
 
@@ -318,17 +389,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PercentageDiscountButton.Style = (Style)FindResource(type == DiscountType.Percentage ? "PrimaryButton" : "CompactAction");
         FixedDiscountButton.Style = (Style)FindResource(type == DiscountType.FixedAmount ? "PrimaryButton" : "CompactAction");
     }
-    private async void Hold_Click(object sender, RoutedEventArgs e)
+    private async void LeaveOrder_Click(object sender, RoutedEventArgs e)
     {
         if (currentOrder is null || currentOrder.Status != OrderStatus.Open) return;
-        await ApplyAsync(w => w.HoldAsync(currentOrder.Id, session.CurrentUser!.Id), "Order held.");
-        if (currentOrder?.Status == OrderStatus.Held) { ShowScreen(HeldOrdersScreen); await LoadHeldOrdersAsync(); }
+        if (currentOrder.Type == OrderType.DineIn)
+        {
+            currentOrder = null;
+            RefreshOrder("The dine-in order remains open on its table.");
+            ShowScreen(HomeScreen);
+            await OpenDiningFloorAsync();
+            return;
+        }
+
+        currentOrder = null;
+        RefreshOrder("The takeaway order remains available in Open takeaways.");
+        ShowScreen(HomeScreen);
     }
     private async void Pay_Click(object sender, RoutedEventArgs e)
     {
         if (currentOrder is null) return;
         await ApplyAsync(w => w.TakePaymentAsync(currentOrder.Id, selectedPaymentMethod, currentOrder.GrandTotal, session.CurrentUser!.Id), "Payment recorded.");
         if (currentOrder?.Status == OrderStatus.Paid) await PrintReceiptAsync(false);
+    }
+    private async void RequestBill_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentOrder?.Type != OrderType.DineIn || currentOrder.Status != OrderStatus.Open) return;
+        await ApplyAsync(w => w.SetBillRequestedAsync(currentOrder.Id, !currentOrder.BillRequested, session.CurrentUser!.Id), currentOrder.BillRequested ? "Bill request cleared." : "Bill requested for this table.");
+        if (sender is System.Windows.Controls.Button button) button.Content = currentOrder?.BillRequested == true ? "Clear bill request" : "Request bill";
     }
     private void CashPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Cash);
     private void CardPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Card);
@@ -360,6 +447,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         CartGrid.ItemsSource = currentOrder?.Lines.ToList();
         OrderInfoText.Text = currentOrder is null ? "No active order" : $"{currentOrder.InvoiceNumber} - {currentOrder.Type} - Server: {currentOrder.ServerName} - {currentOrder.Status}";
+        LeaveOrderButton.Content = currentOrder?.Type == OrderType.DineIn ? "Return to floor plan" : "Return to home";
         BillDiscountTotalText.Text = currentOrder is null ? string.Empty : currentOrder.DiscountAmount.ToString("N2", CultureInfo.CurrentCulture);
         GstTotalText.Text = currentOrder is null ? string.Empty : currentOrder.TaxAmount.ToString("N2", CultureInfo.CurrentCulture);
         GrandTotalText.Text = currentOrder is null ? string.Empty : currentOrder.GrandTotal.ToString("N2", CultureInfo.CurrentCulture);
@@ -367,6 +455,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (currentOrder is not null) { SelectDiscountType(currentOrder.DiscountType == DiscountType.None ? DiscountType.Percentage : currentOrder.DiscountType); BillDiscountValueInput.Text = currentOrder.DiscountValue.ToString("0.##", CultureInfo.CurrentCulture); }
         StatusText.Text = message; OnPropertyChanged(nameof(HasActiveOrder)); OnPropertyChanged(nameof(HasPaidOrder));
     }
-    private void ShowError(Exception ex) { ShowScreen(PosScreen); StatusText.Text = ex.Message; }
+    private void ShowError(Exception ex) { if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); ApplicationStatusText.Text = ex.Message; } else { ShowScreen(PosScreen); StatusText.Text = ex.Message; } }
     private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

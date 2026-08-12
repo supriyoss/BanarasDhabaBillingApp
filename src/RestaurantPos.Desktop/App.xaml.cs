@@ -31,7 +31,7 @@ public partial class App : System.Windows.Application
         var dbPath = Path.Combine(root, "restaurant.db");
         services = new ServiceCollection().AddDbContext<RestaurantDbContext>(o => o.UseSqlite($"Data Source={dbPath}"))
             .AddSingleton<IOrderCalculator, OrderCalculator>().AddSingleton<IReceiptPrinter, WpfReceiptPrinter>().AddSingleton<PinHasher>().AddSingleton<UserSession>()
-            .AddSingleton<IBackupService>(_ => new LocalBackupService(dbPath, Path.Combine(root, "Backups"))).AddSingleton<LocalBackupScheduler>().AddScoped<DatabaseInitializer>().AddScoped<IOrderWorkflow, OrderWorkflow>().AddScoped<IAuthenticationService, AuthenticationService>().AddScoped<IReportingService, ReportingService>().AddScoped<IAdministrationService, AdministrationService>().AddTransient<LoginWindow>().AddTransient<MainWindow>().BuildServiceProvider();
+            .AddSingleton<IBackupService>(_ => new LocalBackupService(dbPath, Path.Combine(root, "Backups"))).AddSingleton<LocalBackupScheduler>().AddScoped<DatabaseInitializer>().AddScoped<IOrderWorkflow, OrderWorkflow>().AddScoped<IAuthenticationService, AuthenticationService>().AddScoped<IReportingService, ReportingService>().AddScoped<IAdministrationService, AdministrationService>().AddScoped<IFloorPlanService, FloorPlanService>().AddTransient<LoginWindow>().AddTransient<FloorPlanEditorWindow>().AddTransient<FloorPlanWindow>().AddTransient<MainWindow>().BuildServiceProvider();
         using (var scope = services.CreateScope()) await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
         services.GetRequiredService<LocalBackupScheduler>().Start();
         if (services.GetRequiredService<LoginWindow>().ShowDialog() != true) { Shutdown(); return; }

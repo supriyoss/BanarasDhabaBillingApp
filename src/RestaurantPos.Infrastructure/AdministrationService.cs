@@ -9,6 +9,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     public async Task<IReadOnlyList<AppUser>> GetStaffAsync(CancellationToken cancellationToken = default) => await db.Users.OrderBy(x => x.DisplayName).ToListAsync(cancellationToken);
     public async Task<AppUser> AddStaffAsync(string displayName, string pin, UserRole role, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         displayName = displayName.Trim();
         if (string.IsNullOrWhiteSpace(displayName) || pin.Length < 4) throw new InvalidOperationException("Enter a staff name and a PIN of at least four digits.");
         if (role == UserRole.Admin) throw new InvalidOperationException("New administrator accounts cannot be created from this screen.");
@@ -27,6 +28,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     }
     public async Task ResetStaffPinAsync(int userId, string newPin, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         if (userId == performedByUserId) throw new InvalidOperationException("Use the Change my PIN section to update your own PIN.");
         if (newPin.Length < 4) throw new InvalidOperationException("The new PIN must contain at least four digits.");
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken) ?? throw new InvalidOperationException("Select an active staff account.");
@@ -39,6 +41,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     public async Task<IReadOnlyList<MenuItem>> GetActiveMenuItemsAsync(CancellationToken cancellationToken = default) => await db.MenuItems.Include(x => x.MenuCategory).Where(x => x.IsActive).OrderBy(x => x.MenuCategory!.SortOrder).ThenBy(x => x.SortOrder).ToListAsync(cancellationToken);
     public async Task<MenuItem> AddMenuItemAsync(int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         name = name.Trim();
         if (string.IsNullOrWhiteSpace(name) || price < 0) throw new InvalidOperationException("Enter a menu item name and price.");
         if (!await db.MenuCategories.AnyAsync(x => x.Id == categoryId && x.IsActive, cancellationToken)) throw new InvalidOperationException("Select an active category.");
@@ -48,6 +51,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     }
     public async Task<int> DeactivateMenuItemsAsync(IReadOnlyCollection<int> menuItemIds, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         var ids = menuItemIds.Distinct().ToArray();
         if (ids.Length == 0) throw new InvalidOperationException("Select one or more menu items to remove.");
         var items = await db.MenuItems.Where(x => ids.Contains(x.Id) && x.IsActive).ToListAsync(cancellationToken);
@@ -61,6 +65,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     }
     public async Task<int> DeactivateStaffAccountsAsync(IReadOnlyCollection<int> userIds, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         var ids = userIds.Distinct().ToArray();
         if (ids.Length == 0) throw new InvalidOperationException("Select one or more staff accounts to deactivate.");
         if (ids.Contains(performedByUserId)) throw new InvalidOperationException("You cannot deactivate your own account.");
@@ -77,6 +82,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     public async Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default) => await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
     public async Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default)
     {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         if (gstRate < 0 || gstRate > 100) throw new InvalidOperationException("Enter a GST rate between 0 and 100.");
         var settings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
         settings.GstRate = gstRate; settings.UpdatedUtc = DateTime.UtcNow;
@@ -88,5 +94,11 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
         var start = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Local).ToUniversalTime();
         var end = start.AddDays(1);
         return await db.Orders.Include(x => x.DiningTable).Include(x => x.CreatedByUser).Where(x => x.Status == OrderStatus.Paid && x.ClosedUtc >= start && x.ClosedUtc < end).OrderByDescending(x => x.ClosedUtc).ToListAsync(cancellationToken);
+    }
+
+    private async Task EnsureRestaurantManagerAsync(int userId, CancellationToken cancellationToken)
+    {
+        if (!await db.Users.AnyAsync(x => x.Id == userId && x.IsActive && x.Role == UserRole.Manager, cancellationToken))
+            throw new InvalidOperationException("Only the restaurant manager can change restaurant settings.");
     }
 }

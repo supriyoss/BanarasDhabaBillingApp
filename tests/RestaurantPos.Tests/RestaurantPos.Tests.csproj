@@ -18,5 +18,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\RestaurantPos.Application\RestaurantPos.Application.csproj" />
     <ProjectReference Include="..\..\src\RestaurantPos.Desktop\RestaurantPos.Desktop.csproj" />
+    <ProjectReference Include="..\..\src\RestaurantPos.Infrastructure\RestaurantPos.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

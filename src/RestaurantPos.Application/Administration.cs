@@ -17,3 +17,16 @@ public interface IAdministrationService
     Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default);
 }
+
+public interface IFloorPlanService
+{
+    Task<IReadOnlyList<FloorLayout>> GetLayoutsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<FloorPlanView>> GetLiveFloorPlansAsync(CancellationToken cancellationToken = default);
+    Task<FloorLayout> AddLayoutAsync(string name, int performedByUserId, CancellationToken cancellationToken = default);
+    Task<FloorSection> AddSectionAsync(int layoutId, string name, int performedByUserId, CancellationToken cancellationToken = default);
+    Task<DiningTable> AddTableAsync(int layoutId, int? sectionId, string name, int capacity, int gridX, int gridY, TableShape shape, int performedByUserId, CancellationToken cancellationToken = default);
+    Task<DiningTable> UpdateTableAsync(int tableId, string name, int capacity, int gridX, int gridY, int gridWidth, int gridHeight, TableShape shape, int? sectionId, bool isActive, int performedByUserId, CancellationToken cancellationToken = default);
+}
+
+public sealed record FloorPlanView(int Id, string Name, IReadOnlyList<FloorTableView> Tables);
+public sealed record FloorTableView(int Id, string Name, string? Section, int Capacity, int GridX, int GridY, int GridWidth, int GridHeight, TableShape Shape, string State, decimal RunningTotal, string? ServerName, DateTime? OpenedUtc);

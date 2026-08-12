@@ -7,6 +7,8 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
 {
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<DiningTable> DiningTables => Set<DiningTable>();
+    public DbSet<FloorLayout> FloorLayouts => Set<FloorLayout>();
+    public DbSet<FloorSection> FloorSections => Set<FloorSection>();
     public DbSet<MenuCategory> MenuCategories => Set<MenuCategory>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<RestaurantSettings> RestaurantSettings => Set<RestaurantSettings>();
@@ -18,7 +20,9 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<AppUser>(e => { e.Property(x => x.DisplayName).HasMaxLength(100).IsRequired(); e.Property(x => x.PinHash).HasMaxLength(255).IsRequired(); e.HasIndex(x => x.DisplayName).IsUnique(); });
-        b.Entity<DiningTable>(e => { e.Property(x => x.Name).HasMaxLength(40).IsRequired(); e.HasIndex(x => x.Name).IsUnique(); });
+        b.Entity<FloorLayout>(e => { e.Property(x => x.Name).HasMaxLength(80).IsRequired(); e.HasIndex(x => x.Name).IsUnique(); });
+        b.Entity<FloorSection>(e => { e.Property(x => x.Name).HasMaxLength(80).IsRequired(); e.HasIndex(x => new { x.FloorLayoutId, x.Name }).IsUnique(); e.HasOne(x => x.FloorLayout).WithMany(x => x.Sections).HasForeignKey(x => x.FloorLayoutId).OnDelete(DeleteBehavior.Cascade); });
+        b.Entity<DiningTable>(e => { e.Property(x => x.Name).HasMaxLength(40).IsRequired(); e.HasIndex(x => x.Name).IsUnique(); e.HasOne(x => x.FloorLayout).WithMany(x => x.Tables).HasForeignKey(x => x.FloorLayoutId).OnDelete(DeleteBehavior.Restrict); e.HasOne(x => x.FloorSection).WithMany(x => x.Tables).HasForeignKey(x => x.FloorSectionId).OnDelete(DeleteBehavior.SetNull); });
         b.Entity<MenuCategory>(e => { e.Property(x => x.Name).HasMaxLength(80).IsRequired(); e.HasIndex(x => x.Name).IsUnique(); });
         b.Entity<MenuItem>(e => { e.Property(x => x.Name).HasMaxLength(120).IsRequired(); e.Property(x => x.UnitPrice).HasPrecision(18, 2); e.Property(x => x.GstRate).HasPrecision(5, 2); e.HasOne(x => x.MenuCategory).WithMany(x => x.Items).HasForeignKey(x => x.MenuCategoryId).OnDelete(DeleteBehavior.Restrict); });
         b.Entity<Order>(e =>

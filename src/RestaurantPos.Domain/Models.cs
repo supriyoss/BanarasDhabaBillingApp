@@ -6,6 +6,7 @@ public enum OrderStatus { Open, Held, Paid, Cancelled }
 public enum PaymentMethod { Cash, Card, Upi, Split }
 public enum DiscountType { None, Percentage, FixedAmount }
 public enum AuditAction { Created, Updated, Held, Resumed, Paid, Reprinted, Cancelled, Login }
+public enum TableShape { Square, Rectangle, Round }
 
 public sealed class AppUser
 {
@@ -23,6 +24,37 @@ public sealed class DiningTable
     public string Name { get; set; } = string.Empty;
     public int Capacity { get; set; }
     public bool IsActive { get; set; } = true;
+    public int? FloorLayoutId { get; set; }
+    public FloorLayout? FloorLayout { get; set; }
+    public int? FloorSectionId { get; set; }
+    public FloorSection? FloorSection { get; set; }
+    public int GridX { get; set; }
+    public int GridY { get; set; }
+    public int GridWidth { get; set; } = 1;
+    public int GridHeight { get; set; } = 1;
+    public TableShape Shape { get; set; }
+}
+
+public sealed class FloorLayout
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public bool IsDefault { get; set; }
+    public bool IsActive { get; set; } = true;
+    public ICollection<FloorSection> Sections { get; set; } = new List<FloorSection>();
+    public ICollection<DiningTable> Tables { get; set; } = new List<DiningTable>();
+}
+
+public sealed class FloorSection
+{
+    public int Id { get; set; }
+    public int FloorLayoutId { get; set; }
+    public FloorLayout? FloorLayout { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public ICollection<DiningTable> Tables { get; set; } = new List<DiningTable>();
 }
 
 public sealed class MenuCategory
@@ -73,6 +105,7 @@ public sealed class Order
     public decimal GstRate { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal GrandTotal { get; set; }
+    public bool BillRequested { get; set; }
     public ICollection<OrderLine> Lines { get; set; } = new List<OrderLine>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
