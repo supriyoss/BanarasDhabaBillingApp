@@ -32,7 +32,7 @@ public sealed class OrderCalculator : IOrderCalculator
             var taxable = baseAmount - lineDiscount;
             line.GstRate = order.GstRate;
             line.TaxAmount = Round(taxable * order.GstRate / 100m);
-            line.LineTotal = taxable + line.TaxAmount;
+            line.LineTotal = taxable;
             tax += line.TaxAmount;
         }
         return new OrderTotals(subtotal, Round(discount), Round(tax), Round(subtotal - discount + tax));

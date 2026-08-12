@@ -25,7 +25,18 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
         user.PinHash = pinHasher.Hash(newPin); db.AuditEntries.Add(new AuditEntry { UserId = userId, Action = AuditAction.Updated, EntityType = "User", EntityId = user.Id.ToString(), Detail = "Changed own PIN." });
         await db.SaveChangesAsync(cancellationToken);
     }
+    public async Task ResetStaffPinAsync(int userId, string newPin, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        if (userId == performedByUserId) throw new InvalidOperationException("Use the Change my PIN section to update your own PIN.");
+        if (newPin.Length < 4) throw new InvalidOperationException("The new PIN must contain at least four digits.");
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken) ?? throw new InvalidOperationException("Select an active staff account.");
+        if (user.Role == UserRole.Admin) throw new InvalidOperationException("Administrator account PINs cannot be reset from this screen.");
+        user.PinHash = pinHasher.Hash(newPin);
+        db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "User", EntityId = user.Id.ToString(), Detail = $"Reset PIN for {user.Role} account '{user.DisplayName}'." });
+        await db.SaveChangesAsync(cancellationToken);
+    }
     public async Task<IReadOnlyList<MenuCategory>> GetCategoriesAsync(CancellationToken cancellationToken = default) => await db.MenuCategories.Where(x => x.IsActive).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<MenuItem>> GetActiveMenuItemsAsync(CancellationToken cancellationToken = default) => await db.MenuItems.Include(x => x.MenuCategory).Where(x => x.IsActive).OrderBy(x => x.MenuCategory!.SortOrder).ThenBy(x => x.SortOrder).ToListAsync(cancellationToken);
     public async Task<MenuItem> AddMenuItemAsync(int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default)
     {
         name = name.Trim();
@@ -34,6 +45,34 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
         var item = new MenuItem { MenuCategoryId = categoryId, Name = name, UnitPrice = price, GstRate = 0, SortOrder = await db.MenuItems.Where(x => x.MenuCategoryId == categoryId).CountAsync(cancellationToken) + 1 };
         db.MenuItems.Add(item); db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Created, EntityType = "MenuItem", EntityId = name, Detail = "Added menu item." });
         await db.SaveChangesAsync(cancellationToken); return item;
+    }
+    public async Task<int> DeactivateMenuItemsAsync(IReadOnlyCollection<int> menuItemIds, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        var ids = menuItemIds.Distinct().ToArray();
+        if (ids.Length == 0) throw new InvalidOperationException("Select one or more menu items to remove.");
+        var items = await db.MenuItems.Where(x => ids.Contains(x.Id) && x.IsActive).ToListAsync(cancellationToken);
+        if (items.Count == 0) throw new InvalidOperationException("Select one or more active menu items to remove.");
+        foreach (var item in items)
+        {
+            item.IsActive = false;
+            db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "MenuItem", EntityId = item.Id.ToString(), Detail = $"Removed menu item '{item.Name}' from the active menu." });
+        }
+        await db.SaveChangesAsync(cancellationToken); return items.Count;
+    }
+    public async Task<int> DeactivateStaffAccountsAsync(IReadOnlyCollection<int> userIds, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        var ids = userIds.Distinct().ToArray();
+        if (ids.Length == 0) throw new InvalidOperationException("Select one or more staff accounts to deactivate.");
+        if (ids.Contains(performedByUserId)) throw new InvalidOperationException("You cannot deactivate your own account.");
+        var users = await db.Users.Where(x => ids.Contains(x.Id) && x.IsActive).ToListAsync(cancellationToken);
+        if (users.Count == 0) throw new InvalidOperationException("Select one or more active staff accounts to deactivate.");
+        if (users.Any(x => x.Role == UserRole.Admin)) throw new InvalidOperationException("Administrator accounts cannot be deactivated from this screen.");
+        foreach (var user in users)
+        {
+            user.IsActive = false;
+            db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "User", EntityId = user.Id.ToString(), Detail = $"Deactivated {user.Role} account '{user.DisplayName}'." });
+        }
+        await db.SaveChangesAsync(cancellationToken); return users.Count;
     }
     public async Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default) => await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
     public async Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default)

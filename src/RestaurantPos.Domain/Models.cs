@@ -63,6 +63,7 @@ public sealed class Order
     public DiningTable? DiningTable { get; set; }
     public int CreatedByUserId { get; set; }
     public AppUser? CreatedByUser { get; set; }
+    public string ServerName { get; set; } = string.Empty;
     public DateTime OpenedUtc { get; set; } = DateTime.UtcNow;
     public DateTime? ClosedUtc { get; set; }
     public string? Notes { get; set; }

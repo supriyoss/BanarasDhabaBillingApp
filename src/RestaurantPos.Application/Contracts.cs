@@ -4,7 +4,7 @@ namespace RestaurantPos.Application;
 
 public interface IReceiptPrinter
 {
-    Task PrintAsync(Order order, bool isReprint, CancellationToken cancellationToken = default);
+    Task<bool> PrintAsync(Order order, bool isReprint, CancellationToken cancellationToken = default);
 }
 
 public interface IBackupService
@@ -14,7 +14,7 @@ public interface IBackupService
 
 public interface IOrderWorkflow
 {
-    Task<Order> CreateAsync(OrderType type, int? tableId, int userId, CancellationToken cancellationToken = default);
+    Task<Order> CreateAsync(OrderType type, int? tableId, int userId, string serverName, CancellationToken cancellationToken = default);
     Task<Order> AddMenuItemAsync(int orderId, int menuItemId, int userId, CancellationToken cancellationToken = default);
     Task<Order> ChangeQuantityAsync(int orderId, int lineId, decimal quantity, int userId, CancellationToken cancellationToken = default);
     Task<Order> SetOrderDiscountAsync(int orderId, DiscountType discountType, decimal discountValue, int userId, CancellationToken cancellationToken = default);

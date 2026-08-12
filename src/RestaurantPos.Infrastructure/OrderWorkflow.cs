@@ -6,14 +6,16 @@ namespace RestaurantPos.Infrastructure;
 
 public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calculator) : IOrderWorkflow
 {
-    public async Task<Order> CreateAsync(OrderType type, int? tableId, int userId, CancellationToken cancellationToken = default)
+    public async Task<Order> CreateAsync(OrderType type, int? tableId, int userId, string serverName, CancellationToken cancellationToken = default)
     {
         await EnsureOperationalUserAsync(userId, cancellationToken);
+        serverName = serverName.Trim();
+        if (string.IsNullOrWhiteSpace(serverName)) throw new InvalidOperationException("Enter the server name before opening a bill.");
         if (type == OrderType.DineIn && tableId is null) throw new InvalidOperationException("Select a table for a dine-in order.");
         var datePart = DateTime.Now.ToString("yyyyMMdd");
         var next = await db.Orders.CountAsync(o => o.InvoiceNumber.StartsWith($"POS-{datePart}-"), cancellationToken) + 1;
         var settings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
-        var order = new Order { InvoiceNumber = $"POS-{datePart}-{next:0000}", Type = type, DiningTableId = tableId, CreatedByUserId = userId, GstRate = settings.GstRate };
+        var order = new Order { InvoiceNumber = $"POS-{datePart}-{next:0000}", Type = type, DiningTableId = tableId, CreatedByUserId = userId, ServerName = serverName, GstRate = settings.GstRate };
         db.Orders.Add(order);
         AddAudit(userId, AuditAction.Created, "Order", order.InvoiceNumber, $"Created {type} order.");
         await db.SaveChangesAsync(cancellationToken);
@@ -39,7 +41,12 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         await EnsureOperationalUserAsync(userId, cancellationToken);
         var order = await LoadOpenAsync(orderId, cancellationToken);
         var line = order.Lines.SingleOrDefault(x => x.Id == lineId) ?? throw new InvalidOperationException("Order line was not found.");
-        if (quantity <= 0) db.OrderLines.Remove(line); else line.Quantity = quantity;
+        if (quantity <= 0)
+        {
+            order.Lines.Remove(line);
+            db.OrderLines.Remove(line);
+        }
+        else line.Quantity = quantity;
         Recalculate(order);
         AddAudit(userId, AuditAction.Updated, "Order", order.InvoiceNumber, quantity <= 0 ? $"Removed {line.ItemName}." : $"Updated {line.ItemName} quantity.");
         await db.SaveChangesAsync(cancellationToken);
@@ -74,6 +81,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         var order = await LoadAsync(orderId, cancellationToken);
         if (order.Status != OrderStatus.Held) throw new InvalidOperationException("Only held orders can be resumed.");
         order.Status = OrderStatus.Open;
+        Recalculate(order);
         AddAudit(userId, AuditAction.Resumed, "Order", order.InvoiceNumber, "Order resumed.");
         await db.SaveChangesAsync(cancellationToken); return await LoadAsync(orderId, cancellationToken);
     }
@@ -100,10 +108,11 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         if (order.Status != OrderStatus.Open) throw new InvalidOperationException("Resume the held order before editing or taking payment.");
         return order;
     }
-    private async Task EnsureOperationalUserAsync(int userId, CancellationToken cancellationToken)
+    private async Task<AppUser> EnsureOperationalUserAsync(int userId, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken) ?? throw new InvalidOperationException("The current staff account is unavailable.");
         if (user.Role == UserRole.Admin) throw new InvalidOperationException("Administrator accounts are limited to administration and reports.");
+        return user;
     }
     private Task<Order> LoadAsync(int orderId, CancellationToken ct) => db.Orders.Include(x => x.Lines).Include(x => x.Payments).SingleAsync(x => x.Id == orderId, ct);
     private void Recalculate(Order order) { var totals = calculator.Calculate(order); order.DiscountAmount = totals.Discount; order.TaxAmount = totals.Tax; order.GrandTotal = totals.Total; }

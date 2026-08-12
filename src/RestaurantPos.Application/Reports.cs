@@ -3,9 +3,11 @@ using RestaurantPos.Domain;
 namespace RestaurantPos.Application;
 
 public sealed record PaymentBreakdown(PaymentMethod Method, decimal Amount);
-public sealed record DailySalesReport(DateTime BusinessDate, int PaidOrderCount, decimal SalesTotal, decimal TaxTotal, IReadOnlyList<PaymentBreakdown> Payments, IReadOnlyList<AuditEntry> AuditEntries);
+public enum SalesReportPeriod { Daily, Monthly, Yearly }
+public sealed record ReportActivity(DateTime OccurredLocal, AuditAction Action, string EntityId, string Detail);
+public sealed record SalesReport(SalesReportPeriod Period, DateTime PeriodStart, DateTime PeriodEnd, int PaidOrderCount, decimal SalesTotal, decimal TaxTotal, IReadOnlyList<PaymentBreakdown> Payments, IReadOnlyList<ReportActivity> Activity);
 
 public interface IReportingService
 {
-    Task<DailySalesReport> GetDailySalesAsync(DateTime businessDate, CancellationToken cancellationToken = default);
+    Task<SalesReport> GetSalesAsync(DateTime businessDate, SalesReportPeriod period, CancellationToken cancellationToken = default);
 }

@@ -23,7 +23,7 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
         b.Entity<MenuItem>(e => { e.Property(x => x.Name).HasMaxLength(120).IsRequired(); e.Property(x => x.UnitPrice).HasPrecision(18, 2); e.Property(x => x.GstRate).HasPrecision(5, 2); e.HasOne(x => x.MenuCategory).WithMany(x => x.Items).HasForeignKey(x => x.MenuCategoryId).OnDelete(DeleteBehavior.Restrict); });
         b.Entity<Order>(e =>
         {
-            e.Property(x => x.InvoiceNumber).HasMaxLength(40).IsRequired(); e.HasIndex(x => x.InvoiceNumber).IsUnique(); e.HasIndex(x => new { x.Status, x.OpenedUtc });
+            e.Property(x => x.InvoiceNumber).HasMaxLength(40).IsRequired(); e.Property(x => x.ServerName).HasMaxLength(100).IsRequired(); e.HasIndex(x => x.InvoiceNumber).IsUnique(); e.HasIndex(x => new { x.Status, x.OpenedUtc });
             e.Property(x => x.DiscountValue).HasPrecision(18, 2); e.Property(x => x.DiscountAmount).HasPrecision(18, 2); e.Property(x => x.GstRate).HasPrecision(5, 2); e.Property(x => x.TaxAmount).HasPrecision(18, 2); e.Property(x => x.GrandTotal).HasPrecision(18, 2);
             e.HasOne(x => x.DiningTable).WithMany().HasForeignKey(x => x.DiningTableId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
