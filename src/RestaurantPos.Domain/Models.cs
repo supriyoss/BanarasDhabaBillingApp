@@ -7,6 +7,7 @@ public enum PaymentMethod { Cash, Card, Upi, Split }
 public enum DiscountType { None, Percentage, FixedAmount }
 public enum AuditAction { Created, Updated, Held, Resumed, Paid, Reprinted, Cancelled, Login }
 public enum TableShape { Square, Rectangle, Round }
+public enum PreparationMode { DineIn, Packed }
 
 public sealed class AppUser
 {
@@ -97,7 +98,9 @@ public sealed class Order
     public AppUser? CreatedByUser { get; set; }
     public string ServerName { get; set; } = string.Empty;
     public DateTime OpenedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime OpenedLocal => RestaurantTime.ToLocal(OpenedUtc);
     public DateTime? ClosedUtc { get; set; }
+    public DateTime? ClosedLocal => ClosedUtc is null ? null : RestaurantTime.ToLocal(ClosedUtc.Value);
     public string? Notes { get; set; }
     public DiscountType DiscountType { get; set; }
     public decimal DiscountValue { get; set; }
@@ -105,7 +108,6 @@ public sealed class Order
     public decimal GstRate { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal GrandTotal { get; set; }
-    public bool BillRequested { get; set; }
     public ICollection<OrderLine> Lines { get; set; } = new List<OrderLine>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
@@ -124,6 +126,7 @@ public sealed class OrderLine
     public decimal DiscountValue { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal LineTotal { get; set; }
+    public PreparationMode PreparationMode { get; set; }
 }
 
 public sealed class Payment

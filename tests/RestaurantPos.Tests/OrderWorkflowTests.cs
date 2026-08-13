@@ -14,9 +14,10 @@ public sealed class OrderWorkflowTests
     {
         await using var fixture = await WorkflowFixture.CreateAsync();
 
-        var first = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
-        var second = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
+        var first = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
+        var second = await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId);
 
+        Assert.NotNull(second);
         Assert.Equal(first.Id, second.Id);
         Assert.Equal(1, await fixture.Db.Orders.CountAsync());
     }
@@ -25,12 +26,13 @@ public sealed class OrderWorkflowTests
     public async Task OpenTable_ReopensLegacyHeldDineInOrder()
     {
         await using var fixture = await WorkflowFixture.CreateAsync();
-        var order = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
         order.Status = OrderStatus.Held;
         await fixture.Db.SaveChangesAsync();
 
-        var reopened = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
+        var reopened = await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId);
 
+        Assert.NotNull(reopened);
         Assert.Equal(order.Id, reopened.Id);
         Assert.Equal(OrderStatus.Open, reopened.Status);
     }
@@ -39,8 +41,9 @@ public sealed class OrderWorkflowTests
     public async Task OpenTakeawayQueue_ContainsTakeawaysButNotDiningOrders()
     {
         await using var fixture = await WorkflowFixture.CreateAsync();
-        var takeaway = await fixture.Workflow.CreateAsync(OrderType.Takeaway, null, fixture.UserId, "Staff");
-        await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
+        var takeaway = await fixture.Workflow.StartWithMenuItemAsync(OrderType.Takeaway, null, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId, "Staff");
+        takeaway = await fixture.Workflow.HoldTakeawayAsync(takeaway.Id, fixture.UserId);
+        await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
 
         var queue = await fixture.Workflow.GetOpenTakeawayOrdersAsync();
 
@@ -52,16 +55,73 @@ public sealed class OrderWorkflowTests
     public async Task Payment_ClearsBillRequestAndReleasesDiningTable()
     {
         await using var fixture = await WorkflowFixture.CreateAsync();
-        var order = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
-        order = await fixture.Workflow.AddMenuItemAsync(order.Id, fixture.MenuItemId, fixture.UserId);
-        order = await fixture.Workflow.SetBillRequestedAsync(order.Id, true, fixture.UserId);
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
 
         var paid = await fixture.Workflow.TakePaymentAsync(order.Id, PaymentMethod.Cash, order.GrandTotal, fixture.UserId);
-        var reopened = await fixture.Workflow.OpenTableAsync(fixture.TableId, fixture.UserId, "Staff");
+        var reopened = await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId);
 
         Assert.Equal(OrderStatus.Paid, paid.Status);
-        Assert.False(paid.BillRequested);
-        Assert.NotEqual(paid.Id, reopened.Id);
+        Assert.Null(reopened);
+    }
+
+    [Fact]
+    public async Task SelectingFreeTable_DoesNotCreateOrOccupyIt()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        Assert.Null(await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId));
+        Assert.Empty(await fixture.Db.Orders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EmptyTakeawayNavigation_CreatesNothingAndQueueStaysEmpty()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        Assert.Empty(await fixture.Workflow.GetOpenTakeawayOrdersAsync());
+        Assert.Empty(await fixture.Db.Orders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CancellingDiningOrder_ReleasesTable()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
+        await fixture.Workflow.CancelAsync(order.Id, fixture.UserId);
+        Assert.Null(await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId));
+    }
+
+    [Fact]
+    public async Task DineInAndPackedLines_CoexistWithoutChangingTotal()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
+        order = await fixture.Workflow.AddMenuItemAsync(order.Id, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId);
+        Assert.Equal(2, order.Lines.Count);
+        Assert.Contains(order.Lines, x => x.PreparationMode == PreparationMode.DineIn);
+        Assert.Contains(order.Lines, x => x.PreparationMode == PreparationMode.Packed);
+        Assert.Equal(210m, order.GrandTotal);
+        fixture.Db.ChangeTracker.Clear();
+        var persisted = await fixture.Db.Orders.Include(x => x.Lines).SingleAsync(x => x.Id == order.Id);
+        Assert.Equal(new[] { PreparationMode.DineIn, PreparationMode.Packed }, persisted.Lines.OrderBy(x => x.PreparationMode).Select(x => x.PreparationMode));
+    }
+
+    [Fact]
+    public async Task MeaningfulTakeaway_AppearsOnlyAfterExplicitHold()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.Takeaway, null, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId, "Staff");
+        Assert.Empty(await fixture.Workflow.GetOpenTakeawayOrdersAsync());
+        await fixture.Workflow.HoldTakeawayAsync(order.Id, fixture.UserId);
+        Assert.Single(await fixture.Workflow.GetOpenTakeawayOrdersAsync());
+    }
+
+    [Fact]
+    public async Task Takeaway_CanBePaidDirectlyWithoutQueueRoundTrip()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.Takeaway, null, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId, "Staff");
+        var paid = await fixture.Workflow.TakePaymentAsync(order.Id, PaymentMethod.Upi, order.GrandTotal, fixture.UserId);
+        Assert.Equal(OrderStatus.Paid, paid.Status);
+        Assert.Empty(await fixture.Workflow.GetOpenTakeawayOrdersAsync());
     }
 
     private sealed class WorkflowFixture : IAsyncDisposable

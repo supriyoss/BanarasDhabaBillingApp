@@ -13,7 +13,7 @@ public sealed class FloorPlanService(RestaurantDbContext db) : IFloorPlanService
         return layouts.Select(layout => new FloorPlanView(layout.Id, layout.Name, layout.Tables.Where(x => x.IsActive).Select(table =>
         {
             var order = activeOrders.OrderByDescending(x => x.OpenedUtc).FirstOrDefault(x => x.DiningTableId == table.Id);
-            return new FloorTableView(table.Id, table.Name, layout.Sections.FirstOrDefault(x => x.Id == table.FloorSectionId)?.Name, table.Capacity, table.GridX, table.GridY, table.GridWidth, table.GridHeight, table.Shape, order is null ? "Available" : order.BillRequested ? "Bill requested" : order.Status == OrderStatus.Held ? "Held" : "Occupied", order?.GrandTotal ?? 0, order?.ServerName, order?.OpenedUtc);
+            return new FloorTableView(table.Id, table.Name, layout.Sections.FirstOrDefault(x => x.Id == table.FloorSectionId)?.Name, table.Capacity, table.GridX, table.GridY, table.GridWidth, table.GridHeight, table.Shape, order is null ? "Available" : "Occupied", order?.GrandTotal ?? 0, order?.ServerName, order?.OpenedUtc);
         }).ToList())).ToList();
     }
 

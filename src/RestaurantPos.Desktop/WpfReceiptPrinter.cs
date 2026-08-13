@@ -32,7 +32,7 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
             document.Blocks.Add(Paragraph("RESTAURANT POS", TextAlignment.Center, FontWeights.Bold, 12));
             document.Blocks.Add(Paragraph(isReprint ? "INVOICE REPRINT" : "TAX INVOICE", TextAlignment.Center, FontWeights.Bold, margin: new Thickness(0, 1, 0, 7)));
 
-            var receiptDate = (order.ClosedUtc ?? order.OpenedUtc).ToLocalTime();
+            var receiptDate = RestaurantTime.ToLocal(order.ClosedUtc ?? order.OpenedUtc);
             document.Blocks.Add(DetailsTable(
                 $"Invoice: {order.InvoiceNumber}", $"Type: {order.Type}",
                 $"Date: {receiptDate:dd-MM-yyyy}", $"Time: {receiptDate:HH:mm}"));
@@ -44,8 +44,11 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
             items.Columns.Add(new TableColumn { Width = new GridLength(36, GridUnitType.Star) });
             var rows = new TableRowGroup();
             rows.Rows.Add(ItemRow("Item", "Qty", "Amount", true));
-            foreach (var line in order.Lines)
-                rows.Rows.Add(ItemRow(line.ItemName, FormatQuantity(line.Quantity), $"{line.LineTotal:N2}"));
+            foreach (var group in GetReceiptGroups(order))
+            {
+                rows.Rows.Add(ItemRow(group.Heading, "", "", true));
+                foreach (var line in group.Lines) rows.Rows.Add(ItemRow(line.ItemName, FormatQuantity(line.Quantity), $"{line.LineTotal:N2}"));
+            }
             items.RowGroups.Add(rows);
             document.Blocks.Add(items);
 
@@ -111,4 +114,6 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
     });
 
     private static string FormatQuantity(decimal quantity) => quantity % 1m == 0 ? quantity.ToString("N0") : quantity.ToString("0.##");
+    internal static IReadOnlyList<ReceiptItemGroup> GetReceiptGroups(Order order) => order.Lines.GroupBy(x => x.PreparationMode).OrderBy(x => x.Key).Select(x => new ReceiptItemGroup(x.Key == PreparationMode.Packed ? "TAKEAWAY / PACK" : "DINE IN", x.ToList())).ToList();
+    internal sealed record ReceiptItemGroup(string Heading, IReadOnlyList<OrderLine> Lines);
 }
