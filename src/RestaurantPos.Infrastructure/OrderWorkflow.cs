@@ -12,11 +12,14 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         var tableExists = await db.DiningTables.AnyAsync(x => x.Id == tableId && x.IsActive, cancellationToken);
         if (!tableExists) throw new InvalidOperationException("This dining table is unavailable.");
 
-        var existing = await db.Orders.Include(x => x.DiningTable).ThenInclude(x => x!.FloorLayout).Include(x => x.Lines).Include(x => x.Payments)
+        var matches = await db.Orders.Include(x => x.DiningTable).ThenInclude(x => x!.FloorLayout).Include(x => x.Lines).Include(x => x.Payments)
             .Where(x => x.Type == OrderType.DineIn && x.DiningTableId == tableId &&
-                (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held))
+                (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held) && (x.Lines.Any() || x.ServerName != string.Empty))
             .OrderByDescending(x => x.OpenedUtc)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        if (matches.Count > 1) throw new InvalidOperationException("More than one active order is assigned to this table. No order was opened; ask an administrator to review the data.");
+        var existing = matches.SingleOrDefault();
         if (existing?.Status == OrderStatus.Held)
         {
             existing.Status = OrderStatus.Open;
@@ -29,7 +32,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
 
     public async Task<Order> StartWithMenuItemAsync(OrderType type, int? tableId, int menuItemId, PreparationMode preparationMode, int userId, string serverName, CancellationToken cancellationToken = default)
     {
-        if (type == OrderType.DineIn && tableId is int selectedTable && await db.Orders.AnyAsync(x => x.Type == OrderType.DineIn && x.DiningTableId == selectedTable && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held), cancellationToken))
+        if (type == OrderType.DineIn && tableId is int selectedTable && await db.Orders.AnyAsync(x => x.Type == OrderType.DineIn && x.DiningTableId == selectedTable && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held) && (x.Lines.Any() || x.ServerName != string.Empty), cancellationToken))
             throw new InvalidOperationException("This table already has an active order. Reopen it from the floor plan.");
         var order = await CreateAsync(type, tableId, userId, serverName, cancellationToken);
         try { return await AddMenuItemAsync(order.Id, menuItemId, userId, cancellationToken, preparationMode); }

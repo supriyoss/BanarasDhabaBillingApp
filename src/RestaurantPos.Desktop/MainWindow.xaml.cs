@@ -50,6 +50,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public MainWindow(IServiceScopeFactory scopeFactory, UserSession session, LocalBackupScheduler backupScheduler)
     {
         InitializeComponent(); this.scopeFactory = scopeFactory; this.session = session; this.backupScheduler = backupScheduler; DataContext = this;
+        MenuGrid.MouseDoubleClick += MenuGrid_DoubleClick;
         if (TableSelectionPanel.Parent is FrameworkElement legacyOrderStartPanel) legacyOrderStartPanel.Visibility = Visibility.Collapsed;
         HeldOrdersNavButton.Content = "Open takeaways";
         UpdateTakeawayQueueLabels();
@@ -580,7 +581,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; ShowScreen(HomeScreen); return; }
         var context = currentOrder.Type == OrderType.DineIn ? selectedTableLabel ?? currentOrder.DiningTable?.Name ?? "this table" : "this takeaway order";
         if (MessageBox.Show(this, $"Cancel {context}?\n\nThis will close the running order and cannot be undone.", "Confirm order cancellation", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
-        try { using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id); currentOrder = null; selectedTableLabel = null; RefreshOrder("Order cancelled."); ShowScreen(HomeScreen); } catch (Exception ex) { ShowError(ex); }
+        try
+        {
+            var wasDineIn = currentOrder.Type == OrderType.DineIn;
+            using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id);
+            currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; RefreshOrder("Order cancelled.");
+            if (wasDineIn) { await LoadDiningFloorAsync(); ShowScreen(diningScreen); } else ShowScreen(HomeScreen);
+        }
+        catch (Exception ex) { ShowError(ex); }
     }
     private void CashPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Cash);
     private void CardPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Card);

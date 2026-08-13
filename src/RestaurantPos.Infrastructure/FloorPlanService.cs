@@ -9,7 +9,7 @@ public sealed class FloorPlanService(RestaurantDbContext db) : IFloorPlanService
     public async Task<IReadOnlyList<FloorPlanView>> GetLiveFloorPlansAsync(CancellationToken cancellationToken = default)
     {
         var layouts = await db.FloorLayouts.Include(x => x.Sections).Include(x => x.Tables).Where(x => x.IsActive).OrderBy(x => x.SortOrder).ToListAsync(cancellationToken);
-        var activeOrders = await db.Orders.Where(x => x.Type == OrderType.DineIn && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held)).ToListAsync(cancellationToken);
+        var activeOrders = await db.Orders.Where(x => x.Type == OrderType.DineIn && (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held) && (x.Lines.Any() || x.ServerName != string.Empty)).ToListAsync(cancellationToken);
         return layouts.Select(layout => new FloorPlanView(layout.Id, layout.Name, layout.Tables.Where(x => x.IsActive).Select(table =>
         {
             var order = activeOrders.OrderByDescending(x => x.OpenedUtc).FirstOrDefault(x => x.DiningTableId == table.Id);
