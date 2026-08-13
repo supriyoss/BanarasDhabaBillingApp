@@ -22,6 +22,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private int? pendingTableId;
     private readonly System.Windows.Controls.ComboBox menuCategoryFilter = new() { MinWidth = 180, Margin = new Thickness(0, 8, 0, 0), DisplayMemberPath = "Name" };
     private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
+    private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
+    private readonly System.Windows.Controls.PasswordBox confirmStaffPinInput = new() { Margin = new Thickness(4), Height = 34, Padding = new Thickness(9, 6, 9, 6) };
+    private readonly System.Windows.Controls.Grid diningScreen = new() { Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 190, DisplayMemberPath = "Name", Margin = new Thickness(4) };
+    private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.White, MinHeight = 520, MinWidth = 850 };
+    private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "Dining" };
+    private IReadOnlyList<FloorPlanView> diningLayouts = [];
+    private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
     private bool choosingDineIn;
     private DiscountType selectedDiscountType = DiscountType.Percentage;
     private PaymentMethod selectedPaymentMethod = PaymentMethod.Cash;
@@ -43,9 +51,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (LeaveOrderButton.Parent is System.Windows.Controls.Panel orderActions)
         {
             var hold = new System.Windows.Controls.Button { Content = "Save open takeaway" }; hold.Click += HoldTakeaway_Click; orderActions.Children.Add(hold);
-            var packed = new System.Windows.Controls.Button { Content = "Toggle Dine In / Packed" }; packed.Click += TogglePacked_Click; orderActions.Children.Add(packed);
+            preparationModeButton.Click += TogglePacked_Click; orderActions.Children.Add(preparationModeButton);
             var cancel = new System.Windows.Controls.Button { Content = "Cancel order" }; cancel.Click += CancelOrder_Click; orderActions.Children.Add(cancel);
         }
+        BuildDiningScreen();
+        ConfigureRoleAccountForm();
+        ConfigureOperationalGrids();
+        CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
         if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader) menuHeader.Children.Add(menuCategoryFilter);
         if (NewMenuCategorySelector.Parent is System.Windows.Controls.Panel categoryHost) { NewMenuCategorySelector.Visibility = Visibility.Collapsed; categoryHost.Children.Add(managementCategorySelector); }
@@ -75,7 +87,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         StaffText.Text = $"Current order - {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role})";
         HomeStaffText.Text = $"Signed in as {session.CurrentUser.DisplayName} ({session.CurrentUser.Role})";
         ServerNameInput.Text = session.CurrentUser.DisplayName;
-        var isRestaurantManager = session.CurrentUser.Role == UserRole.Manager;
+        var isRestaurantManager = RolePermissions.CanManageRestaurant(session.CurrentUser.Role);
         AdminNavButton.Visibility = IsAdministrator || isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
         AdminNavButton.Content = IsAdministrator ? "Application" : "Restaurant";
         ReportsNavButton.Visibility = isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
@@ -105,7 +117,83 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ShowScreen(FrameworkElement screen)
     {
         HomeScreen.Visibility = screen == HomeScreen ? Visibility.Visible : Visibility.Collapsed; PosScreen.Visibility = screen == PosScreen ? Visibility.Visible : Visibility.Collapsed; HeldOrdersScreen.Visibility = screen == HeldOrdersScreen ? Visibility.Visible : Visibility.Collapsed; ReportsScreen.Visibility = screen == ReportsScreen ? Visibility.Visible : Visibility.Collapsed; MenuManagementScreen.Visibility = screen == MenuManagementScreen ? Visibility.Visible : Visibility.Collapsed; AdminScreen.Visibility = screen == AdminScreen ? Visibility.Visible : Visibility.Collapsed; ApplicationMaintenanceScreen.Visibility = screen == ApplicationMaintenanceScreen ? Visibility.Visible : Visibility.Collapsed;
+        diningScreen.Visibility = screen == diningScreen ? Visibility.Visible : Visibility.Collapsed;
         SetActiveNavigation(HomeNavButton, screen == HomeScreen); SetActiveNavigation(PosNavButton, screen == PosScreen); SetActiveNavigation(HeldOrdersNavButton, screen == HeldOrdersScreen); SetActiveNavigation(ReportsNavButton, screen == ReportsScreen); SetActiveNavigation(MenuManagementNavButton, screen == MenuManagementScreen); SetActiveNavigation(AdminNavButton, screen == AdminScreen || screen == ApplicationMaintenanceScreen);
+        SetActiveNavigation(diningNavButton, screen == diningScreen);
+    }
+
+    private void BuildDiningScreen()
+    {
+        if (HomeScreen.Parent is not System.Windows.Controls.Grid host) return;
+        diningNavButton.Style = (Style)FindResource("NavButton"); diningNavButton.Click += async (_, _) => await OpenDiningFloorAsync();
+        if (HomeNavButton.Parent is System.Windows.Controls.StackPanel nav) nav.Children.Insert(Math.Min(1, nav.Children.Count), diningNavButton);
+        diningScreen.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+        diningScreen.RowDefinitions.Add(new System.Windows.Controls.RowDefinition());
+        var header = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 0, 0, 14) };
+        var title = new System.Windows.Controls.StackPanel();
+        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Dining floor plan", FontSize = 28, FontWeight = FontWeights.SemiBold });
+        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Select a table to start or reopen its order.", Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+        header.Children.Add(title);
+        var refresh = new System.Windows.Controls.Button { Content = "Refresh" }; refresh.Click += async (_, _) => await LoadDiningFloorAsync();
+        System.Windows.Controls.DockPanel.SetDock(refresh, System.Windows.Controls.Dock.Right); header.Children.Add(refresh);
+        System.Windows.Controls.DockPanel.SetDock(diningLayoutSelector, System.Windows.Controls.Dock.Right); header.Children.Add(diningLayoutSelector);
+        diningScreen.Children.Add(header);
+        var scroll = new System.Windows.Controls.ScrollViewer { Content = diningFloorGrid, HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto };
+        System.Windows.Controls.Grid.SetRow(scroll, 1); diningScreen.Children.Add(scroll); host.Children.Add(diningScreen);
+        diningLayoutSelector.SelectionChanged += (_, _) => RenderDiningFloor();
+    }
+
+    private void ConfigureRoleAccountForm()
+    {
+        NewStaffNameInput.Visibility = Visibility.Collapsed;
+        NewStaffRoleSelector.Visibility = Visibility.Collapsed;
+        staffRoleSelector.ItemsSource = new[] { UserRole.Manager, UserRole.Cashier }; staffRoleSelector.SelectedIndex = 0;
+        if (NewStaffNameInput.Parent is System.Windows.Controls.StackPanel form)
+        {
+            var nameLabel = form.Children.OfType<System.Windows.Controls.TextBlock>().FirstOrDefault(x => x.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.Text == "Name"));
+            if (nameLabel is not null) { nameLabel.Text = "Role *"; form.Children.Insert(form.Children.IndexOf(NewStaffNameInput) + 1, staffRoleSelector); }
+            var createButton = form.Children.OfType<System.Windows.Controls.Button>().First(x => Equals(x.Content, "Add staff member"));
+            var confirmLabel = new System.Windows.Controls.TextBlock { Text = "Confirm PIN *", FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 6, 4, 0) };
+            var index = form.Children.IndexOf(createButton); form.Children.Insert(index, confirmLabel); form.Children.Insert(index + 1, confirmStaffPinInput); createButton.Content = "Create account";
+        }
+    }
+
+    private void ConfigureOperationalGrids()
+    {
+        foreach (var grid in new[] { MenuGrid, CartGrid, HeldOrdersGrid }) { grid.CanUserReorderColumns = false; grid.CanUserResizeColumns = false; grid.RowHeight = 34; grid.SetValue(System.Windows.Controls.ScrollViewer.VerticalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Auto); grid.SetValue(System.Windows.Controls.ScrollViewer.HorizontalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled); }
+        CartGrid.MaxHeight = 250;
+        if (CartGrid.Columns.Count == 3)
+        {
+            CartGrid.Columns[1].Width = 92; CartGrid.Columns[2].Header = "Total"; CartGrid.Columns[2].Width = 82;
+            CartGrid.Columns.Insert(2, new System.Windows.Controls.DataGridTextColumn { Header = "Rate", Binding = new System.Windows.Data.Binding(nameof(OrderLine.UnitPrice)) { StringFormat = "N2" }, Width = 82 });
+            CartGrid.Columns.Insert(3, new System.Windows.Controls.DataGridTextColumn { Header = "Mode", Binding = new System.Windows.Data.Binding(nameof(OrderLine.PreparationMode)), Width = 76 });
+        }
+    }
+
+    private async Task LoadDiningFloorAsync()
+    {
+        using var scope = scopeFactory.CreateScope();
+        diningLayouts = await scope.ServiceProvider.GetRequiredService<IFloorPlanService>().GetLiveFloorPlansAsync();
+        var selectedId = (diningLayoutSelector.SelectedItem as FloorPlanView)?.Id;
+        diningLayoutSelector.ItemsSource = diningLayouts;
+        diningLayoutSelector.SelectedItem = diningLayouts.FirstOrDefault(x => x.Id == selectedId) ?? diningLayouts.FirstOrDefault();
+        RenderDiningFloor();
+    }
+
+    private void RenderDiningFloor()
+    {
+        diningFloorGrid.Children.Clear(); diningFloorGrid.RowDefinitions.Clear(); diningFloorGrid.ColumnDefinitions.Clear();
+        if (diningLayoutSelector.SelectedItem is not FloorPlanView layout) return;
+        var columns = Math.Max(8, layout.Tables.Select(x => x.GridX + x.GridWidth).DefaultIfEmpty(8).Max());
+        var rows = Math.Max(5, layout.Tables.Select(x => x.GridY + x.GridHeight).DefaultIfEmpty(5).Max());
+        for (var i = 0; i < columns; i++) diningFloorGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(125) });
+        for (var i = 0; i < rows; i++) diningFloorGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(105) });
+        foreach (var table in layout.Tables)
+        {
+            var button = new System.Windows.Controls.Button { Tag = table.Id, Margin = new Thickness(7), Background = table.State == "Occupied" ? new SolidColorBrush(Color.FromRgb(186, 230, 253)) : new SolidColorBrush(Color.FromRgb(241, 245, 249)), Content = new System.Windows.Controls.TextBlock { Text = table.State == "Available" ? $"{table.Name}\n{table.Capacity} seats\nAvailable" : $"{table.Name}\nOccupied\n{table.RunningTotal:N2}", TextAlignment = TextAlignment.Center } };
+            button.Click += async (_, _) => await OpenTableOrderAsync((int)button.Tag);
+            System.Windows.Controls.Grid.SetColumn(button, table.GridX); System.Windows.Controls.Grid.SetRow(button, table.GridY); System.Windows.Controls.Grid.SetColumnSpan(button, table.GridWidth); System.Windows.Controls.Grid.SetRowSpan(button, table.GridHeight); diningFloorGrid.Children.Add(button);
+        }
     }
     private static void SetActiveNavigation(System.Windows.Controls.Button button, bool isActive)
     {
@@ -116,7 +204,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ReorderManagerNavigation()
     {
         if (session.CurrentUser?.Role != UserRole.Manager || HomeNavButton.Parent is not System.Windows.Controls.StackPanel nav) return;
-        var desired = new[] { HomeNavButton, MenuManagementNavButton, HeldOrdersNavButton, AdminNavButton, ReportsNavButton };
+        var desired = new[] { HomeNavButton, diningNavButton, MenuManagementNavButton, HeldOrdersNavButton, AdminNavButton, ReportsNavButton };
         foreach (var button in desired) nav.Children.Remove(button);
         foreach (var button in desired) nav.Children.Add(button);
     }
@@ -147,9 +235,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void HomeDining_Click(object sender, RoutedEventArgs e) => await OpenDiningFloorAsync();
     private async Task OpenDiningFloorAsync()
     {
-        using var scope = scopeFactory.CreateScope();
-        var floorPlan = scope.ServiceProvider.GetRequiredService<FloorPlanWindow>(); floorPlan.Owner = this;
-        if (floorPlan.ShowDialog() == true && floorPlan.SelectedTableId is int tableId) await OpenTableOrderAsync(tableId);
+        await LoadDiningFloorAsync();
+        ShowScreen(diningScreen);
     }
 
     private async void HomeTakeaway_Click(object sender, RoutedEventArgs e)
@@ -253,8 +340,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             StaffGrid.ItemsSource = await admin.GetStaffAsync();
             managementCategorySelector.ItemsSource = await admin.GetCategoriesAsync();
             GstRateInput.Text = (await admin.GetSettingsAsync()).GstRate.ToString("0.##", CultureInfo.CurrentCulture);
-            NewStaffRoleSelector.ItemsSource = new[] { UserRole.Manager, UserRole.Cashier, UserRole.Server };
-            if (NewStaffRoleSelector.SelectedIndex < 0) NewStaffRoleSelector.SelectedIndex = 0;
             if (managementCategorySelector.SelectedIndex < 0) managementCategorySelector.SelectedIndex = 0;
             await LoadHistoryAsync(admin);
         }
@@ -264,9 +349,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         try
         {
-            if (NewStaffRoleSelector.SelectedItem is not UserRole role) throw new InvalidOperationException("Select a staff role.");
-            using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IAdministrationService>().AddStaffAsync(NewStaffNameInput.Text, NewStaffPinInput.Password, role, session.CurrentUser!.Id);
-            NewStaffNameInput.Clear(); NewStaffPinInput.Clear(); AdminStatusText.Text = "Staff account created."; await LoadAdminDataAsync();
+            if (staffRoleSelector.SelectedItem is not UserRole role) throw new InvalidOperationException("Select a staff role.");
+            if (NewStaffPinInput.Password != confirmStaffPinInput.Password) throw new InvalidOperationException("PIN and confirmation do not match.");
+            using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IAdministrationService>().AddStaffAsync(role, NewStaffPinInput.Password, session.CurrentUser!.Id);
+            NewStaffPinInput.Clear(); confirmStaffPinInput.Clear(); AdminStatusText.Text = $"{role} account created."; await LoadAdminDataAsync();
         }
         catch (Exception ex) { AdminStatusText.Text = ex.Message; }
     }
@@ -430,13 +516,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (currentOrder is null) return;
         await ApplyAsync(w => w.TakePaymentAsync(currentOrder.Id, selectedPaymentMethod, currentOrder.GrandTotal, session.CurrentUser!.Id), "Payment recorded.");
-        if (currentOrder?.Status == OrderStatus.Paid) await PrintReceiptAsync(false);
+        if (currentOrder?.Status != OrderStatus.Paid) return;
+        var paidOrder = currentOrder;
+        var printMessage = await PrintReceiptAsync(paidOrder, false);
+        currentOrder = null; pendingOrderType = null; pendingTableId = null; invoicePrintedForCurrentOrder = false;
+        RefreshOrder(string.Empty); ShowScreen(HomeScreen);
+        HomeStaffText.Text = $"{printMessage} Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
     }
     private async void HoldTakeaway_Click(object sender, RoutedEventArgs e)
     {
         if (currentOrder?.Type != OrderType.Takeaway) return; await ApplyAsync(w => w.HoldTakeawayAsync(currentOrder.Id, session.CurrentUser!.Id), "Takeaway saved open."); currentOrder = null; RefreshOrder("Takeaway is available in Open takeaways."); ShowScreen(HomeScreen);
     }
-    private async void TogglePacked_Click(object sender, RoutedEventArgs e) { if (currentOrder?.Type != OrderType.DineIn || CartGrid.SelectedItem is not OrderLine line) return; var mode = line.PreparationMode == PreparationMode.Packed ? PreparationMode.DineIn : PreparationMode.Packed; await ApplyAsync(w => w.SetLinePreparationModeAsync(currentOrder.Id, line.Id, mode, session.CurrentUser!.Id), $"{line.ItemName} marked {mode}."); }
+    private async void TogglePacked_Click(object sender, RoutedEventArgs e) { if (currentOrder?.Type != OrderType.DineIn || CartGrid.SelectedItem is not OrderLine line) return; var mode = line.PreparationMode == PreparationMode.Packed ? PreparationMode.DineIn : PreparationMode.Packed; await ApplyAsync(w => w.SetLinePreparationModeAsync(currentOrder.Id, line.Id, mode, session.CurrentUser!.Id), $"{line.ItemName} marked {mode}."); UpdatePreparationAction(); }
+    private void UpdatePreparationAction() { preparationModeButton.Visibility = currentOrder?.Type == OrderType.DineIn ? Visibility.Visible : Visibility.Collapsed; preparationModeButton.Content = CartGrid.SelectedItem is OrderLine { PreparationMode: PreparationMode.Packed } ? "Mark selected as Dine-In" : "Mark selected as Packed"; }
     private async void CancelOrder_Click(object sender, RoutedEventArgs e) { if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; ShowScreen(HomeScreen); return; } try { using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id); currentOrder = null; RefreshOrder("Order cancelled."); ShowScreen(HomeScreen); } catch (Exception ex) { ShowError(ex); } }
     private void CashPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Cash);
     private void CardPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Card);
@@ -448,20 +540,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CardPaymentButton.Style = (Style)FindResource(method == PaymentMethod.Card ? "PrimaryButton" : "CompactAction");
         UpiPaymentButton.Style = (Style)FindResource(method == PaymentMethod.Upi ? "PrimaryButton" : "CompactAction");
     }
-    private async void Reprint_Click(object sender, RoutedEventArgs e) => await PrintReceiptAsync(true);
-    private async Task PrintReceiptAsync(bool isReprint)
+    private async void Reprint_Click(object sender, RoutedEventArgs e) { if (currentOrder is not null) await PrintReceiptAsync(currentOrder, true); }
+    private async Task<string> PrintReceiptAsync(Order order, bool isReprint)
     {
-        if (currentOrder is null) return;
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(currentOrder, isReprint);
-            if (!printed) { StatusText.Text = "Printing was cancelled."; return; }
+            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(order, isReprint);
+            if (!printed) { StatusText.Text = "Payment completed; printing was cancelled."; return "Payment completed; printing was cancelled."; }
             invoicePrintedForCurrentOrder = true;
             ReprintButton.Visibility = Visibility.Visible;
             StatusText.Text = isReprint ? "Invoice sent for reprint." : "Invoice sent to the printer.";
+            return StatusText.Text;
         }
-        catch (Exception ex) { ShowError(ex); }
+        catch (Exception ex) { StatusText.Text = $"Payment completed; invoice printing failed: {ex.Message}"; return StatusText.Text; }
     }
     private async Task ApplyAsync(Func<IOrderWorkflow, Task<Order>> action, string message) { try { using var scope = scopeFactory.CreateScope(); currentOrder = await action(scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()); RefreshOrder(message); } catch (Exception ex) { ShowError(ex); } }
     private void RefreshOrder(string message)
@@ -473,6 +565,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         GstTotalText.Text = currentOrder is null ? string.Empty : currentOrder.TaxAmount.ToString("N2", CultureInfo.CurrentCulture);
         GrandTotalText.Text = currentOrder is null ? string.Empty : currentOrder.GrandTotal.ToString("N2", CultureInfo.CurrentCulture);
         ReprintButton.Visibility = currentOrder?.Status == OrderStatus.Paid && invoicePrintedForCurrentOrder ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePreparationAction();
         if (currentOrder is not null) { SelectDiscountType(currentOrder.DiscountType == DiscountType.None ? DiscountType.Percentage : currentOrder.DiscountType); BillDiscountValueInput.Text = currentOrder.DiscountValue.ToString("0.##", CultureInfo.CurrentCulture); }
         StatusText.Text = message; OnPropertyChanged(nameof(HasActiveOrder)); OnPropertyChanged(nameof(HasPaidOrder));
     }

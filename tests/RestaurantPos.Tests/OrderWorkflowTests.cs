@@ -105,6 +105,20 @@ public sealed class OrderWorkflowTests
     }
 
     [Fact]
+    public async Task ChangingPreparationMode_PreservesTotalAndTableOccupancy()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Cashier");
+        var total = order.GrandTotal;
+
+        order = await fixture.Workflow.SetLinePreparationModeAsync(order.Id, order.Lines.Single().Id, PreparationMode.Packed, fixture.UserId);
+
+        Assert.Equal(PreparationMode.Packed, order.Lines.Single().PreparationMode);
+        Assert.Equal(total, order.GrandTotal);
+        Assert.NotNull(await fixture.Workflow.FindActiveTableOrderAsync(fixture.TableId, fixture.UserId));
+    }
+
+    [Fact]
     public async Task MeaningfulTakeaway_AppearsOnlyAfterExplicitHold()
     {
         await using var fixture = await WorkflowFixture.CreateAsync();
@@ -146,7 +160,7 @@ public sealed class OrderWorkflowTests
             await connection.OpenAsync();
             var db = new RestaurantDbContext(new DbContextOptionsBuilder<RestaurantDbContext>().UseSqlite(connection).Options);
             await db.Database.EnsureCreatedAsync();
-            var user = new AppUser { DisplayName = "Staff", PinHash = "test", Role = UserRole.Server };
+            var user = new AppUser { DisplayName = "Cashier", PinHash = "test", Role = UserRole.Cashier };
             var table = new DiningTable { Name = "Table 1", Capacity = 4 };
             var category = new MenuCategory { Name = "Mains", SortOrder = 1 };
             var item = new MenuItem { Name = "Meal", UnitPrice = 100m, MenuCategory = category };

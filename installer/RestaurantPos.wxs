@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Restaurant POS"
            Manufacturer="Restaurant POS"
-           Version="3.0.1"
+           Version="3.0.2"
            UpgradeCode="{C2E1C6F0-50E9-43DC-95E5-03B7B43574B7}"
            Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer version of Restaurant POS is already installed." />

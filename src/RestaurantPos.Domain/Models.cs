@@ -9,6 +9,13 @@ public enum AuditAction { Created, Updated, Held, Resumed, Paid, Reprinted, Canc
 public enum TableShape { Square, Rectangle, Round }
 public enum PreparationMode { DineIn, Packed }
 
+public static class RolePermissions
+{
+    public static bool CanUsePos(UserRole role) => role is UserRole.Manager or UserRole.Cashier;
+    public static bool CanManageRestaurant(UserRole role) => role == UserRole.Manager;
+    public static bool CanManageApplication(UserRole role) => role == UserRole.Admin;
+}
+
 public sealed class AppUser
 {
     public int Id { get; set; }
@@ -127,6 +134,7 @@ public sealed class OrderLine
     public decimal TaxAmount { get; set; }
     public decimal LineTotal { get; set; }
     public PreparationMode PreparationMode { get; set; }
+    public string PreparationActionLabel => PreparationMode == PreparationMode.Packed ? "Mark Dine-In" : "Mark Packed";
 }
 
 public sealed class Payment

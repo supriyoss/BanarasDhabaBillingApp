@@ -22,7 +22,7 @@ public sealed class FloorPlanServiceTests
     }
 
     [Fact]
-    public async Task Server_CannotEditFloorPlan()
+    public async Task Cashier_CannotEditFloorPlan()
     {
         await using var fixture = await Fixture.CreateAsync();
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.AddLayoutAsync("Private", fixture.ServerId));
@@ -51,7 +51,7 @@ public sealed class FloorPlanServiceTests
             var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
             var db = new RestaurantDbContext(new DbContextOptionsBuilder<RestaurantDbContext>().UseSqlite(connection).Options); await db.Database.EnsureCreatedAsync();
             var manager = new AppUser { DisplayName = "Manager", PinHash = "test", Role = UserRole.Manager };
-            var server = new AppUser { DisplayName = "Server", PinHash = "test", Role = UserRole.Server };
+            var server = new AppUser { DisplayName = "Cashier", PinHash = "test", Role = UserRole.Cashier };
             var administrator = new AppUser { DisplayName = "Administrator", PinHash = "test", Role = UserRole.Admin };
             db.Users.AddRange(manager, server, administrator); await db.SaveChangesAsync();
             return new Fixture(connection, db) { ManagerId = manager.Id, ServerId = server.Id, AdministratorId = administrator.Id };

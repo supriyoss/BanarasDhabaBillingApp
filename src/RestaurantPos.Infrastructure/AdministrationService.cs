@@ -7,13 +7,13 @@ namespace RestaurantPos.Infrastructure;
 public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinHasher) : IAdministrationService
 {
     public async Task<IReadOnlyList<AppUser>> GetStaffAsync(CancellationToken cancellationToken = default) => await db.Users.OrderBy(x => x.DisplayName).ToListAsync(cancellationToken);
-    public async Task<AppUser> AddStaffAsync(string displayName, string pin, UserRole role, int performedByUserId, CancellationToken cancellationToken = default)
+    public async Task<AppUser> AddStaffAsync(UserRole role, string pin, int performedByUserId, CancellationToken cancellationToken = default)
     {
-        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
-        displayName = displayName.Trim();
-        if (string.IsNullOrWhiteSpace(displayName) || pin.Length < 4) throw new InvalidOperationException("Enter a staff name and a PIN of at least four digits.");
-        if (role == UserRole.Admin) throw new InvalidOperationException("New administrator accounts cannot be created from this screen.");
-        if (await db.Users.AnyAsync(x => x.DisplayName == displayName, cancellationToken)) throw new InvalidOperationException("A staff member with that name already exists.");
+        await EnsureAccountAdministratorAsync(performedByUserId, cancellationToken);
+        if (pin.Length < 4) throw new InvalidOperationException("Enter a PIN of at least four digits.");
+        if (role is not (UserRole.Manager or UserRole.Cashier)) throw new InvalidOperationException("Only Manager and Cashier role accounts can be created.");
+        if (await db.Users.AnyAsync(x => x.Role == role, cancellationToken)) throw new InvalidOperationException($"The {role} account already exists.");
+        var displayName = role.ToString();
         var user = new AppUser { DisplayName = displayName, PinHash = pinHasher.Hash(pin), Role = role };
         db.Users.Add(user); db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Created, EntityType = "User", EntityId = displayName, Detail = $"Created {role} staff account." });
         await db.SaveChangesAsync(cancellationToken); return user;
@@ -100,5 +100,10 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     {
         if (!await db.Users.AnyAsync(x => x.Id == userId && x.IsActive && x.Role == UserRole.Manager, cancellationToken))
             throw new InvalidOperationException("Only the restaurant manager can change restaurant settings.");
+    }
+    private async Task EnsureAccountAdministratorAsync(int userId, CancellationToken cancellationToken)
+    {
+        if (!await db.Users.AnyAsync(x => x.Id == userId && x.IsActive && (x.Role == UserRole.Manager || x.Role == UserRole.Admin), cancellationToken))
+            throw new InvalidOperationException("Only a manager or administrator can create role accounts.");
     }
 }
