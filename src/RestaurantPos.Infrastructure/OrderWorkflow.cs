@@ -12,7 +12,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         var tableExists = await db.DiningTables.AnyAsync(x => x.Id == tableId && x.IsActive, cancellationToken);
         if (!tableExists) throw new InvalidOperationException("This dining table is unavailable.");
 
-        var existing = await db.Orders.Include(x => x.Lines).Include(x => x.Payments)
+        var existing = await db.Orders.Include(x => x.DiningTable).ThenInclude(x => x!.FloorLayout).Include(x => x.Lines).Include(x => x.Payments)
             .Where(x => x.Type == OrderType.DineIn && x.DiningTableId == tableId &&
                 (x.Status == OrderStatus.Open || x.Status == OrderStatus.Held))
             .OrderByDescending(x => x.OpenedUtc)
@@ -167,7 +167,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         if (user.Role == UserRole.Admin) throw new InvalidOperationException("Administrator accounts are limited to administration and reports.");
         return user;
     }
-    private Task<Order> LoadAsync(int orderId, CancellationToken ct) => db.Orders.Include(x => x.Lines).Include(x => x.Payments).SingleAsync(x => x.Id == orderId, ct);
+    private Task<Order> LoadAsync(int orderId, CancellationToken ct) => db.Orders.Include(x => x.DiningTable).ThenInclude(x => x!.FloorLayout).Include(x => x.Lines).Include(x => x.Payments).SingleAsync(x => x.Id == orderId, ct);
     private void Recalculate(Order order) { var totals = calculator.Calculate(order); order.DiscountAmount = totals.Discount; order.TaxAmount = totals.Tax; order.GrandTotal = totals.Total; }
     private void AddAudit(int userId, AuditAction action, string type, string id, string detail) => db.AuditEntries.Add(new AuditEntry { UserId = userId, Action = action, EntityType = type, EntityId = id, Detail = detail });
 }

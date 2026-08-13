@@ -47,7 +47,8 @@ public sealed class FloorPlanService(RestaurantDbContext db) : IFloorPlanService
         await EnsureEditorAsync(performedByUserId, cancellationToken); ValidateTable(name, capacity, gridX, gridY, 1, 1);
         if (!await db.FloorLayouts.AnyAsync(x => x.Id == layoutId && x.IsActive, cancellationToken)) throw new InvalidOperationException("Select an active floor.");
         await ValidateSectionAsync(layoutId, sectionId, cancellationToken);
-        if (await db.DiningTables.AnyAsync(x => x.Name == name.Trim(), cancellationToken)) throw new InvalidOperationException("A table with that name already exists.");
+        var normalizedName = name.Trim().ToLower();
+        if (await db.DiningTables.AnyAsync(x => x.FloorLayoutId == layoutId && x.Name.ToLower() == normalizedName, cancellationToken)) throw new InvalidOperationException("A table with that name already exists on this floor.");
         var table = new DiningTable { FloorLayoutId = layoutId, FloorSectionId = sectionId, Name = name.Trim(), Capacity = capacity, GridX = gridX, GridY = gridY, Shape = shape };
         db.DiningTables.Add(table); Audit(performedByUserId, AuditAction.Created, "DiningTable", table.Name, "Added table to floor plan.");
         await db.SaveChangesAsync(cancellationToken); return table;
@@ -58,7 +59,8 @@ public sealed class FloorPlanService(RestaurantDbContext db) : IFloorPlanService
         await EnsureEditorAsync(performedByUserId, cancellationToken); ValidateTable(name, capacity, gridX, gridY, gridWidth, gridHeight);
         var table = await db.DiningTables.SingleOrDefaultAsync(x => x.Id == tableId, cancellationToken) ?? throw new InvalidOperationException("Table was not found.");
         await ValidateSectionAsync(table.FloorLayoutId!.Value, sectionId, cancellationToken);
-        if (await db.DiningTables.AnyAsync(x => x.Id != tableId && x.Name == name.Trim(), cancellationToken)) throw new InvalidOperationException("A table with that name already exists.");
+        var normalizedName = name.Trim().ToLower();
+        if (await db.DiningTables.AnyAsync(x => x.Id != tableId && x.FloorLayoutId == table.FloorLayoutId && x.Name.ToLower() == normalizedName, cancellationToken)) throw new InvalidOperationException("A table with that name already exists on this floor.");
         table.Name = name.Trim(); table.Capacity = capacity; table.GridX = gridX; table.GridY = gridY; table.GridWidth = gridWidth; table.GridHeight = gridHeight; table.Shape = shape; table.FloorSectionId = sectionId; table.IsActive = isActive;
         Audit(performedByUserId, AuditAction.Updated, "DiningTable", table.Id.ToString(), "Updated floor-plan table.");
         await db.SaveChangesAsync(cancellationToken); return table;

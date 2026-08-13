@@ -43,10 +43,23 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     {
         await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
         name = name.Trim();
-        if (string.IsNullOrWhiteSpace(name) || price < 0) throw new InvalidOperationException("Enter a menu item name and price.");
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Enter a menu item name.");
+        if (price <= 0) throw new InvalidOperationException("Menu item price must be greater than 0.");
         if (!await db.MenuCategories.AnyAsync(x => x.Id == categoryId && x.IsActive, cancellationToken)) throw new InvalidOperationException("Select an active category.");
         var item = new MenuItem { MenuCategoryId = categoryId, Name = name, UnitPrice = price, GstRate = 0, SortOrder = await db.MenuItems.Where(x => x.MenuCategoryId == categoryId).CountAsync(cancellationToken) + 1 };
         db.MenuItems.Add(item); db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Created, EntityType = "MenuItem", EntityId = name, Detail = "Added menu item." });
+        await db.SaveChangesAsync(cancellationToken); return item;
+    }
+    public async Task<MenuItem> UpdateMenuItemAsync(int menuItemId, int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
+        name = name.Trim();
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Enter a menu item name.");
+        if (price <= 0) throw new InvalidOperationException("Menu item price must be greater than 0.");
+        if (!await db.MenuCategories.AnyAsync(x => x.Id == categoryId && x.IsActive, cancellationToken)) throw new InvalidOperationException("Select an active category.");
+        var item = await db.MenuItems.SingleOrDefaultAsync(x => x.Id == menuItemId && x.IsActive, cancellationToken) ?? throw new InvalidOperationException("Select an active menu item to edit.");
+        item.MenuCategoryId = categoryId; item.Name = name; item.UnitPrice = price;
+        db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "MenuItem", EntityId = item.Id.ToString(), Detail = $"Updated menu item to '{name}' at {price:N2}." });
         await db.SaveChangesAsync(cancellationToken); return item;
     }
     public async Task<int> DeactivateMenuItemsAsync(IReadOnlyCollection<int> menuItemIds, int performedByUserId, CancellationToken cancellationToken = default)

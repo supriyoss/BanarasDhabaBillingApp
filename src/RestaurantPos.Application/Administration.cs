@@ -11,6 +11,7 @@ public interface IAdministrationService
     Task<IReadOnlyList<MenuCategory>> GetCategoriesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MenuItem>> GetActiveMenuItemsAsync(CancellationToken cancellationToken = default);
     Task<MenuItem> AddMenuItemAsync(int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default);
+    Task<MenuItem> UpdateMenuItemAsync(int menuItemId, int categoryId, string name, decimal price, int performedByUserId, CancellationToken cancellationToken = default);
     Task<int> DeactivateMenuItemsAsync(IReadOnlyCollection<int> menuItemIds, int performedByUserId, CancellationToken cancellationToken = default);
     Task<int> DeactivateStaffAccountsAsync(IReadOnlyCollection<int> userIds, int performedByUserId, CancellationToken cancellationToken = default);
     Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default);

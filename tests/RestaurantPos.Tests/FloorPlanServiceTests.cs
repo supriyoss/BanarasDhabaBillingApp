@@ -22,6 +22,21 @@ public sealed class FloorPlanServiceTests
     }
 
     [Fact]
+    public async Task TableName_IsUniqueWithinFloor_ButCanRepeatOnAnotherFloor()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var main = await fixture.Service.AddLayoutAsync("Main", fixture.ManagerId);
+        var first = await fixture.Service.AddLayoutAsync("First Floor", fixture.ManagerId);
+        await fixture.Service.AddTableAsync(main.Id, null, "Table 1", 4, 0, 0, TableShape.Square, fixture.ManagerId);
+
+        var duplicate = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.AddTableAsync(main.Id, null, "Table 1", 4, 1, 0, TableShape.Square, fixture.ManagerId));
+        var allowed = await fixture.Service.AddTableAsync(first.Id, null, "Table 1", 4, 0, 0, TableShape.Square, fixture.ManagerId);
+
+        Assert.Contains("this floor", duplicate.Message);
+        Assert.Equal(first.Id, allowed.FloorLayoutId);
+    }
+
+    [Fact]
     public async Task Cashier_CannotEditFloorPlan()
     {
         await using var fixture = await Fixture.CreateAsync();

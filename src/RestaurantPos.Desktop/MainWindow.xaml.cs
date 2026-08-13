@@ -20,6 +20,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private Order? currentOrder;
     private OrderType? pendingOrderType;
     private int? pendingTableId;
+    private string? selectedTableLabel;
     private readonly System.Windows.Controls.ComboBox menuCategoryFilter = new() { MinWidth = 180, Margin = new Thickness(0, 8, 0, 0), DisplayMemberPath = "Name" };
     private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
     private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
@@ -30,6 +31,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "Dining" };
     private IReadOnlyList<FloorPlanView> diningLayouts = [];
     private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
+    private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Save open takeaway", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
+    private readonly System.Windows.Controls.ComboBox editMenuCategorySelector = new() { MinWidth = 165, DisplayMemberPath = "Name", Margin = new Thickness(4) };
+    private readonly System.Windows.Controls.TextBox editMenuNameInput = new() { MinWidth = 190, Margin = new Thickness(4) };
+    private readonly System.Windows.Controls.TextBox editMenuPriceInput = new() { Width = 95, Margin = new Thickness(4) };
     private bool choosingDineIn;
     private DiscountType selectedDiscountType = DiscountType.Percentage;
     private PaymentMethod selectedPaymentMethod = PaymentMethod.Cash;
@@ -50,17 +56,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (PosNavButton.Parent is System.Windows.Controls.Panel primaryNavigation) primaryNavigation.Children.Remove(PosNavButton);
         if (LeaveOrderButton.Parent is System.Windows.Controls.Panel orderActions)
         {
-            var hold = new System.Windows.Controls.Button { Content = "Save open takeaway" }; hold.Click += HoldTakeaway_Click; orderActions.Children.Add(hold);
+            holdTakeawayButton.Click += HoldTakeaway_Click; orderActions.Children.Add(holdTakeawayButton);
             preparationModeButton.Click += TogglePacked_Click; orderActions.Children.Add(preparationModeButton);
             var cancel = new System.Windows.Controls.Button { Content = "Cancel order" }; cancel.Click += CancelOrder_Click; orderActions.Children.Add(cancel);
         }
+        if (StaffText.Parent is System.Windows.Controls.StackPanel orderHeader) orderHeader.Children.Insert(0, orderContextBanner);
         BuildDiningScreen();
         ConfigureRoleAccountForm();
         ConfigureOperationalGrids();
+        ConfigureMenuEditor();
         CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
         if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader) menuHeader.Children.Add(menuCategoryFilter);
         if (NewMenuCategorySelector.Parent is System.Windows.Controls.Panel categoryHost) { NewMenuCategorySelector.Visibility = Visibility.Collapsed; categoryHost.Children.Add(managementCategorySelector); }
+        NewMenuPriceInput.ToolTip = "Menu item price must be greater than 0";
+        if (NewMenuPriceInput.Parent is System.Windows.Controls.StackPanel pricePanel) pricePanel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Price must be greater than 0", Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9)), FontSize = 11 });
         foreach (var column in HeldOrdersGrid.Columns.Where(x => Equals(x.Header, "Opened")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.OpenedLocal)) { StringFormat = "dd MMM HH:mm" };
         foreach (var column in HistoryGrid.Columns.Where(x => Equals(x.Header, "Closed")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.ClosedLocal)) { StringFormat = "dd MMM yyyy HH:mm" };
         GstRateInput.AcceptsReturn = false;
@@ -170,6 +180,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void ConfigureMenuEditor()
+    {
+        if (AdminMenuGrid.Parent is not System.Windows.Controls.Grid host) return;
+        var editor = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
+        editor.Children.Add(new System.Windows.Controls.TextBlock { Text = "Edit selected:", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
+        editor.Children.Add(editMenuCategorySelector); editor.Children.Add(editMenuNameInput); editor.Children.Add(editMenuPriceInput);
+        var update = new System.Windows.Controls.Button { Content = "Save changes" }; update.Click += UpdateMenuItem_Click; editor.Children.Add(update);
+        var row = new System.Windows.Controls.RowDefinition { Height = GridLength.Auto }; host.RowDefinitions.Insert(3, row);
+        System.Windows.Controls.Grid.SetRow(editor, 3); host.Children.Add(editor);
+        foreach (FrameworkElement child in host.Children) if (child != editor && System.Windows.Controls.Grid.GetRow(child) >= 3) System.Windows.Controls.Grid.SetRow(child, System.Windows.Controls.Grid.GetRow(child) + 1);
+        AdminMenuGrid.SelectionChanged += (_, _) => PopulateMenuEditor();
+    }
+
+    private void PopulateMenuEditor()
+    {
+        if (AdminMenuGrid.SelectedItem is not MenuItem item) return;
+        editMenuNameInput.Text = item.Name; editMenuPriceInput.Text = item.UnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
+        editMenuCategorySelector.SelectedItem = editMenuCategorySelector.Items.OfType<MenuCategory>().FirstOrDefault(x => x.Id == item.MenuCategoryId);
+    }
+
     private async Task LoadDiningFloorAsync()
     {
         using var scope = scopeFactory.CreateScope();
@@ -265,6 +295,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             using var scope = scopeFactory.CreateScope();
+            var table = await scope.ServiceProvider.GetRequiredService<RestaurantDbContext>().DiningTables.Include(x => x.FloorLayout).SingleAsync(x => x.Id == tableId);
+            selectedTableLabel = table.FloorLayout is null ? table.Name : $"{table.FloorLayout.Name} • {table.Name}";
             currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
                 .FindActiveTableOrderAsync(tableId, session.CurrentUser!.Id);
             pendingOrderType = currentOrder is null ? OrderType.DineIn : null; pendingTableId = currentOrder is null ? tableId : null;
@@ -284,7 +316,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         TableSelectionPanel.Visibility = Visibility.Collapsed;
         DineInButton.Style = (Style)FindResource("CompactAction");
         TakeawayButton.Style = (Style)FindResource("PrimaryButton");
-        currentOrder = null; pendingOrderType = OrderType.Takeaway; pendingTableId = null; ShowScreen(PosScreen); RefreshOrder("New takeaway. Add the first item to start the order.");
+        currentOrder = null; pendingOrderType = OrderType.Takeaway; pendingTableId = null; selectedTableLabel = null; ShowScreen(PosScreen); RefreshOrder("New takeaway. Add the first item to start the order.");
         return Task.CompletedTask;
     }
     private async Task LoadHeldOrdersAsync()
@@ -379,11 +411,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         try
         {
-            if (managementCategorySelector.SelectedItem is not MenuCategory category || !decimal.TryParse(NewMenuPriceInput.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var price)) throw new InvalidOperationException("Choose a category and enter a valid price.");
+            if (managementCategorySelector.SelectedItem is not MenuCategory category || !decimal.TryParse(NewMenuPriceInput.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var price)) throw new InvalidOperationException("Choose a category and enter a valid price greater than 0.");
+            if (price <= 0) throw new InvalidOperationException("Menu item price must be greater than 0.");
             using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IAdministrationService>().AddMenuItemAsync(category.Id, NewMenuItemNameInput.Text, price, session.CurrentUser!.Id);
             NewMenuItemNameInput.Clear(); NewMenuPriceInput.Clear(); MenuManagementStatusText.Text = "Menu item added."; await ReloadMenuAsync(); await LoadMenuManagementAsync();
         }
-        catch (Exception ex) { AdminStatusText.Text = ex.Message; }
+        catch (Exception ex) { MenuManagementStatusText.Text = ex.Message; }
+    }
+    private async void UpdateMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (AdminMenuGrid.SelectedItem is not MenuItem item) throw new InvalidOperationException("Select one menu item to edit.");
+            if (editMenuCategorySelector.SelectedItem is not MenuCategory category || !decimal.TryParse(editMenuPriceInput.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var price)) throw new InvalidOperationException("Choose a category and enter a valid price greater than 0.");
+            if (price <= 0) throw new InvalidOperationException("Menu item price must be greater than 0.");
+            using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IAdministrationService>().UpdateMenuItemAsync(item.Id, category.Id, editMenuNameInput.Text, price, session.CurrentUser!.Id);
+            MenuManagementStatusText.Text = "Menu item updated. Existing order lines retain their captured name and price."; await ReloadMenuAsync(); await LoadMenuManagementAsync();
+        }
+        catch (Exception ex) { MenuManagementStatusText.Text = ex.Message; }
     }
     private async Task ReloadMenuAsync()
     {
@@ -398,7 +443,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             using var scope = scopeFactory.CreateScope();
             var admin = scope.ServiceProvider.GetRequiredService<IAdministrationService>();
             AdminMenuGrid.ItemsSource = await admin.GetActiveMenuItemsAsync();
-            managementCategorySelector.ItemsSource = await admin.GetCategoriesAsync();
+            var categories = await admin.GetCategoriesAsync();
+            managementCategorySelector.ItemsSource = categories; editMenuCategorySelector.ItemsSource = categories;
             if (managementCategorySelector.SelectedIndex < 0) managementCategorySelector.SelectedIndex = 0;
         }
         catch (Exception ex) { MenuManagementStatusText.Text = ex.Message; }
@@ -519,7 +565,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (currentOrder?.Status != OrderStatus.Paid) return;
         var paidOrder = currentOrder;
         var printMessage = await PrintReceiptAsync(paidOrder, false);
-        currentOrder = null; pendingOrderType = null; pendingTableId = null; invoicePrintedForCurrentOrder = false;
+        currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; invoicePrintedForCurrentOrder = false;
         RefreshOrder(string.Empty); ShowScreen(HomeScreen);
         HomeStaffText.Text = $"{printMessage} Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
     }
@@ -529,7 +575,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     private async void TogglePacked_Click(object sender, RoutedEventArgs e) { if (currentOrder?.Type != OrderType.DineIn || CartGrid.SelectedItem is not OrderLine line) return; var mode = line.PreparationMode == PreparationMode.Packed ? PreparationMode.DineIn : PreparationMode.Packed; await ApplyAsync(w => w.SetLinePreparationModeAsync(currentOrder.Id, line.Id, mode, session.CurrentUser!.Id), $"{line.ItemName} marked {mode}."); UpdatePreparationAction(); }
     private void UpdatePreparationAction() { preparationModeButton.Visibility = currentOrder?.Type == OrderType.DineIn ? Visibility.Visible : Visibility.Collapsed; preparationModeButton.Content = CartGrid.SelectedItem is OrderLine { PreparationMode: PreparationMode.Packed } ? "Mark selected as Dine-In" : "Mark selected as Packed"; }
-    private async void CancelOrder_Click(object sender, RoutedEventArgs e) { if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; ShowScreen(HomeScreen); return; } try { using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id); currentOrder = null; RefreshOrder("Order cancelled."); ShowScreen(HomeScreen); } catch (Exception ex) { ShowError(ex); } }
+    private async void CancelOrder_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; ShowScreen(HomeScreen); return; }
+        var context = currentOrder.Type == OrderType.DineIn ? selectedTableLabel ?? currentOrder.DiningTable?.Name ?? "this table" : "this takeaway order";
+        if (MessageBox.Show(this, $"Cancel {context}?\n\nThis will close the running order and cannot be undone.", "Confirm order cancellation", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        try { using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id); currentOrder = null; selectedTableLabel = null; RefreshOrder("Order cancelled."); ShowScreen(HomeScreen); } catch (Exception ex) { ShowError(ex); }
+    }
     private void CashPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Cash);
     private void CardPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Card);
     private void UpiPayment_Click(object sender, RoutedEventArgs e) => SelectPaymentMethod(PaymentMethod.Upi);
@@ -559,7 +611,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void RefreshOrder(string message)
     {
         CartGrid.ItemsSource = currentOrder?.Lines.ToList();
-        OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : $"New {pendingOrderType} order (not saved yet)" : $"{currentOrder.InvoiceNumber} - {currentOrder.Type} - Server: {currentOrder.ServerName} - {currentOrder.Status}";
+        var isTakeaway = currentOrder?.Type == OrderType.Takeaway || pendingOrderType == OrderType.Takeaway;
+        var dineInLabel = selectedTableLabel ?? currentOrder?.DiningTable?.Name ?? "Selected table";
+        orderContextBanner.Text = isTakeaway ? "TAKEAWAY ORDER" : currentOrder?.Type == OrderType.DineIn || pendingOrderType == OrderType.DineIn ? $"DINE-IN • {dineInLabel}" : "NO ORDER SELECTED";
+        OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : isTakeaway ? "New takeaway order (not saved yet)" : $"New dine-in order for {dineInLabel} (not saved yet)" : isTakeaway ? $"{currentOrder.InvoiceNumber} • Takeaway • Server: {currentOrder.ServerName} • {currentOrder.Status}" : $"{currentOrder.InvoiceNumber} • {dineInLabel} • Server: {currentOrder.ServerName} • {currentOrder.Status}";
+        holdTakeawayButton.Visibility = isTakeaway ? Visibility.Visible : Visibility.Collapsed;
+        holdTakeawayButton.IsEnabled = currentOrder?.Type == OrderType.Takeaway && currentOrder.Status == OrderStatus.Open;
         LeaveOrderButton.Content = currentOrder?.Type == OrderType.DineIn ? "Return to floor plan" : "Return to home";
         BillDiscountTotalText.Text = currentOrder is null ? string.Empty : currentOrder.DiscountAmount.ToString("N2", CultureInfo.CurrentCulture);
         GstTotalText.Text = currentOrder is null ? string.Empty : currentOrder.TaxAmount.ToString("N2", CultureInfo.CurrentCulture);
