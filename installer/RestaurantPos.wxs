@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Restaurant POS"
            Manufacturer="Restaurant POS"
-           Version="3.0.2"
+           Version="3.0.3"
            UpgradeCode="{C2E1C6F0-50E9-43DC-95E5-03B7B43574B7}"
            Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer version of Restaurant POS is already installed." />
@@ -12,11 +12,14 @@
     </StandardDirectory>
 
     <Feature Id="MainFeature" Title="Restaurant POS" Level="1">
-      <Component Id="ApplicationFiles" Directory="INSTALLFOLDER" Bitness="always64">
+      <Component Id="ApplicationLauncher" Directory="INSTALLFOLDER" Bitness="always64">
         <File Id="RestaurantPosExecutable" Source="$(var.PublishDir)\RestaurantPos.Desktop.exe" KeyPath="yes">
           <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Restaurant POS" WorkingDirectory="INSTALLFOLDER" />
         </File>
       </Component>
+      <Files Include="$(var.PublishDir)\*.dll" Directory="INSTALLFOLDER" />
+      <Files Include="$(var.PublishDir)\*.json" Directory="INSTALLFOLDER" />
+      <Files Include="$(var.PublishDir)\createdump.exe" Directory="INSTALLFOLDER" />
     </Feature>
   </Package>
 </Wix>
