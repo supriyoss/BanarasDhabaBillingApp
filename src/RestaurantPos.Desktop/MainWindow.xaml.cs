@@ -26,6 +26,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
     private readonly System.Windows.Controls.PasswordBox confirmStaffPinInput = new() { Margin = new Thickness(4), Height = 34, Padding = new Thickness(9, 6, 9, 6) };
     private readonly System.Windows.Controls.Grid diningScreen = new() { Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Grid floorPlanEditorScreen = new() { Visibility = Visibility.Collapsed };
+    private FloorPlanEditorView? floorPlanEditorView;
     private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 190, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.White, MinHeight = 520, MinWidth = 850 };
     private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "Dining" };
@@ -63,6 +65,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         if (StaffText.Parent is System.Windows.Controls.StackPanel orderHeader) orderHeader.Children.Insert(0, orderContextBanner);
         BuildDiningScreen();
+        BuildFloorPlanEditorScreen();
         ConfigureRoleAccountForm();
         ConfigureOperationalGrids();
         ConfigureMenuEditor();
@@ -129,6 +132,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         HomeScreen.Visibility = screen == HomeScreen ? Visibility.Visible : Visibility.Collapsed; PosScreen.Visibility = screen == PosScreen ? Visibility.Visible : Visibility.Collapsed; HeldOrdersScreen.Visibility = screen == HeldOrdersScreen ? Visibility.Visible : Visibility.Collapsed; ReportsScreen.Visibility = screen == ReportsScreen ? Visibility.Visible : Visibility.Collapsed; MenuManagementScreen.Visibility = screen == MenuManagementScreen ? Visibility.Visible : Visibility.Collapsed; AdminScreen.Visibility = screen == AdminScreen ? Visibility.Visible : Visibility.Collapsed; ApplicationMaintenanceScreen.Visibility = screen == ApplicationMaintenanceScreen ? Visibility.Visible : Visibility.Collapsed;
         diningScreen.Visibility = screen == diningScreen ? Visibility.Visible : Visibility.Collapsed;
+        floorPlanEditorScreen.Visibility = screen == floorPlanEditorScreen ? Visibility.Visible : Visibility.Collapsed;
         SetActiveNavigation(HomeNavButton, screen == HomeScreen); SetActiveNavigation(PosNavButton, screen == PosScreen); SetActiveNavigation(HeldOrdersNavButton, screen == HeldOrdersScreen); SetActiveNavigation(ReportsNavButton, screen == ReportsScreen); SetActiveNavigation(MenuManagementNavButton, screen == MenuManagementScreen); SetActiveNavigation(AdminNavButton, screen == AdminScreen || screen == ApplicationMaintenanceScreen);
         SetActiveNavigation(diningNavButton, screen == diningScreen);
     }
@@ -152,6 +156,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var scroll = new System.Windows.Controls.ScrollViewer { Content = diningFloorGrid, HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto };
         System.Windows.Controls.Grid.SetRow(scroll, 1); diningScreen.Children.Add(scroll); host.Children.Add(diningScreen);
         diningLayoutSelector.SelectionChanged += (_, _) => RenderDiningFloor();
+    }
+
+    private void BuildFloorPlanEditorScreen()
+    {
+        if (HomeScreen.Parent is not System.Windows.Controls.Grid host) return;
+        floorPlanEditorView = new FloorPlanEditorView(scopeFactory, session);
+        floorPlanEditorView.DoneRequested += async (_, _) =>
+        {
+            await LoadDiningFloorAsync();
+            ShowScreen(HomeScreen);
+        };
+        floorPlanEditorScreen.Children.Add(floorPlanEditorView);
+        host.Children.Add(floorPlanEditorScreen);
     }
 
     private void ConfigureRoleAccountForm()
@@ -254,13 +271,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         { yield return child; foreach (var descendant in LogicalDescendants(child)) yield return descendant; }
     }
     private async void BackupNow_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) return; try { await backupScheduler.CreateNowAsync(); ApplicationStatusText.Text = "Local database backup created."; } catch (Exception ex) { ApplicationStatusText.Text = ex.Message; } }
-    private void EditFloorPlan_Click(object sender, RoutedEventArgs e)
+    private async void EditFloorPlan_Click(object sender, RoutedEventArgs e)
     {
         if (session.CurrentUser?.Role != UserRole.Manager) return;
-        using var scope = scopeFactory.CreateScope();
-        var editor = scope.ServiceProvider.GetRequiredService<FloorPlanEditorWindow>();
-        editor.Owner = this;
-        editor.ShowDialog();
+        if (floorPlanEditorView is null) return;
+        await floorPlanEditorView.ReloadAsync();
+        ShowScreen(floorPlanEditorScreen);
     }
 
     private async void HomeDining_Click(object sender, RoutedEventArgs e) => await OpenDiningFloorAsync();
