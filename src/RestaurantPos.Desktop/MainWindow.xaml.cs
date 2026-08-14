@@ -235,13 +235,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var numericHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Price", "Price (INR)", "Rate", "Amount", "Total", "Seats", "Column", "Row", "Width", "Height" };
         var valueStyle = (Style)FindResource("RightAlignedCellText");
+        var textStyle = (Style)FindResource("CenteredCellText");
         var headerStyle = (Style)FindResource("RightAlignedHeader");
         foreach (var grid in new[] { MenuGrid, CartGrid, HeldOrdersGrid, PaymentsGrid, AdminMenuGrid, StaffGrid, HistoryGrid, AuditGrid })
         {
-            foreach (var column in grid.Columns.OfType<System.Windows.Controls.DataGridTextColumn>().Where(column => numericHeaders.Contains(column.Header?.ToString() ?? string.Empty)))
+            foreach (var column in grid.Columns.OfType<System.Windows.Controls.DataGridTextColumn>())
             {
-                column.ElementStyle = valueStyle;
-                column.HeaderStyle = headerStyle;
+                if (numericHeaders.Contains(column.Header?.ToString() ?? string.Empty))
+                {
+                    column.ElementStyle = valueStyle;
+                    column.HeaderStyle = headerStyle;
+                }
+                else column.ElementStyle ??= textStyle;
             }
         }
     }

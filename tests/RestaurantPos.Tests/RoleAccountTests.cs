@@ -31,6 +31,17 @@ public sealed class RoleAccountTests
         Assert.False(RolePermissions.CanUsePos(UserRole.Admin));
     }
 
+    [Fact]
+    public async Task Administrator_CanResetAnotherAccountsPin()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Admin);
+        var account = await fixture.Service.AddStaffAsync(UserRole.Cashier, "4567", fixture.ActorId);
+
+        await fixture.Service.ResetStaffPinAsync(account.Id, "8910", fixture.ActorId);
+
+        Assert.True(new PinHasher().Verify("8910", account.PinHash));
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
