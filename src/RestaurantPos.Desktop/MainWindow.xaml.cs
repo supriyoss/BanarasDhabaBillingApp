@@ -25,6 +25,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
     private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
     private readonly System.Windows.Controls.PasswordBox confirmStaffPinInput = new() { Margin = new Thickness(4), Height = 34, Padding = new Thickness(9, 6, 9, 6) };
+    private readonly System.Windows.Controls.DataGrid applicationAccountGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, SelectionMode = System.Windows.Controls.DataGridSelectionMode.Single, Height = 170, Margin = new Thickness(0, 10, 0, 8) };
+    private readonly System.Windows.Controls.PasswordBox applicationResetPinInput = new() { Width = 150, Margin = new Thickness(8, 0, 8, 0) };
     private readonly System.Windows.Controls.Grid diningScreen = new() { Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Grid floorPlanEditorScreen = new() { Visibility = Visibility.Collapsed };
     private FloorPlanEditorView? floorPlanEditorView;
@@ -71,6 +73,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ConfigureOperationalGrids();
         ConfigureNumericColumnAlignment();
         ConfigureMenuEditor();
+        ConfigureApplicationAccountManagement();
         CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
         if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader)
@@ -114,15 +117,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         AdminNavButton.Content = IsAdministrator ? "Application" : "Restaurant";
         ReportsNavButton.Visibility = isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
         MenuManagementNavButton.Visibility = isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
-        BackupNavButton.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
+        BackupNavButton.Visibility = Visibility.Collapsed;
         OfflineReadyIndicator.Visibility = IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
         PosNavButton.Visibility = Visibility.Collapsed;
         HomeNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
+        diningNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
         FloorPlanEditorButton.Visibility = session.CurrentUser.Role == UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
         HeldOrdersNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
         ReorderManagerNavigation();
         HistoryFromDate.SelectedDate = DateTime.Today;
-        if (IsAdministrator) ShowScreen(ApplicationMaintenanceScreen);
+        if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); await LoadApplicationAccountsAsync(); }
         else { ShowScreen(HomeScreen); StatusText.Text = "Choose Dining or Takeaway from Home."; }
     }
 
@@ -133,7 +137,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void ShowMenuManagement_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager) return; ShowScreen(MenuManagementScreen); await LoadMenuManagementAsync(); }
     private async void ShowAdmin_Click(object sender, RoutedEventArgs e)
     {
-        if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); return; }
+        if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); await LoadApplicationAccountsAsync(); return; }
         if (session.CurrentUser?.Role == UserRole.Manager) { ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
     }
     private void ShowScreen(FrameworkElement screen)
@@ -148,6 +152,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void BuildDiningScreen()
     {
         if (HomeScreen.Parent is not System.Windows.Controls.Grid host) return;
+        diningNavButton.Visibility = IsAdministrator ? Visibility.Collapsed : Visibility.Visible;
         diningNavButton.Style = (Style)FindResource("NavButton"); diningNavButton.Click += async (_, _) => await OpenDiningFloorAsync();
         if (HomeNavButton.Parent is System.Windows.Controls.StackPanel nav) nav.Children.Insert(Math.Min(1, nav.Children.Count), diningNavButton);
         diningScreen.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
@@ -241,6 +246,57 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void ConfigureApplicationAccountManagement()
+    {
+        if (ApplicationMaintenanceScreen.Child is not System.Windows.Controls.StackPanel host) return;
+        applicationAccountGrid.Style = (Style)FindResource("ModernMenuGrid");
+        applicationAccountGrid.CanUserReorderColumns = false;
+        applicationAccountGrid.CanUserResizeColumns = false;
+        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Account", Binding = new System.Windows.Data.Binding(nameof(AppUser.DisplayName)), Width = new System.Windows.Controls.DataGridLength(1, System.Windows.Controls.DataGridLengthUnitType.Star) });
+        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Role", Binding = new System.Windows.Data.Binding(nameof(AppUser.Role)), Width = new System.Windows.Controls.DataGridLength(140) });
+
+        var resetRow = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        resetRow.Children.Add(new System.Windows.Controls.TextBlock { Text = "New PIN *", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        resetRow.Children.Add(applicationResetPinInput);
+        var resetButton = new System.Windows.Controls.Button { Content = "Reset selected account PIN" };
+        resetButton.Click += ResetApplicationAccountPin_Click;
+        resetRow.Children.Add(resetButton);
+
+        var content = new System.Windows.Controls.StackPanel();
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Account password reset", FontSize = 18, FontWeight = FontWeights.SemiBold });
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Select another active account and assign a new PIN of at least four digits.", Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)), Margin = new Thickness(0, 3, 0, 0) });
+        content.Children.Add(applicationAccountGrid);
+        content.Children.Add(resetRow);
+        var card = new System.Windows.Controls.Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(16), Margin = new Thickness(0, 14, 0, 0), Child = content };
+        host.Children.Insert(host.Children.IndexOf(ApplicationStatusText), card);
+    }
+
+    private async Task LoadApplicationAccountsAsync()
+    {
+        if (!IsAdministrator) return;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var users = await scope.ServiceProvider.GetRequiredService<IAdministrationService>().GetStaffAsync();
+            applicationAccountGrid.ItemsSource = users.Where(x => x.IsActive && x.Id != session.CurrentUser!.Id && x.Role != UserRole.Admin).ToList();
+        }
+        catch (Exception ex) { ApplicationStatusText.Text = ex.Message; }
+    }
+
+    private async void ResetApplicationAccountPin_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (applicationAccountGrid.SelectedItem is not AppUser user) throw new InvalidOperationException("Select an account to reset its PIN.");
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IAdministrationService>().ResetStaffPinAsync(user.Id, applicationResetPinInput.Password, session.CurrentUser!.Id);
+            applicationResetPinInput.Clear();
+            ApplicationStatusText.Text = $"PIN reset for {user.DisplayName}.";
+            await LoadApplicationAccountsAsync();
+        }
+        catch (Exception ex) { ApplicationStatusText.Text = ex.Message; }
+    }
+
     private void PopulateMenuEditor()
     {
         if (AdminMenuGrid.SelectedItems.Count != 1 || AdminMenuGrid.SelectedItem is not MenuItem item)
@@ -317,6 +373,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void HomeDining_Click(object sender, RoutedEventArgs e) => await OpenDiningFloorAsync();
     private async Task OpenDiningFloorAsync()
     {
+        if (IsAdministrator) return;
         await LoadDiningFloorAsync();
         ShowScreen(diningScreen);
     }
@@ -329,6 +386,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void BeginDineIn_Click(object sender, RoutedEventArgs e)
     {
+        if (IsAdministrator) return;
         choosingDineIn = true;
         TableSelectionPanel.Visibility = Visibility.Visible;
         DineInButton.Style = (Style)FindResource("PrimaryButton");
@@ -344,6 +402,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task OpenTableOrderAsync(int tableId)
     {
+        if (IsAdministrator) return;
         try
         {
             using var scope = scopeFactory.CreateScope();
@@ -397,6 +456,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             using var scope = scopeFactory.CreateScope(); var report = await scope.ServiceProvider.GetRequiredService<IReportingService>().GetSalesAsync(BusinessDate.SelectedDate ?? DateTime.Today, selectedReportPeriod);
             OrderCountText.Text = $"Paid bills: {report.PaidOrderCount}"; SalesTotalText.Text = $"Sales: {report.SalesTotal:N2}"; TaxTotalText.Text = $"GST: {report.TaxTotal:N2}";
+            AverageBillText.Text = $"INR {(report.PaidOrderCount == 0 ? 0 : report.SalesTotal / report.PaidOrderCount):N2}";
             ReportTitleText.Text = selectedReportPeriod switch { SalesReportPeriod.Monthly => "Monthly sales report", SalesReportPeriod.Yearly => "Yearly sales report", _ => "Daily sales report" };
             ReportDescriptionText.Text = $"Sales, GST, payments, and activity for {FormatReportRange(report)}.";
             PaymentsGrid.ItemsSource = report.Payments; AuditGrid.ItemsSource = report.Activity; SetReportPeriodButtons();

@@ -28,7 +28,7 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     }
     public async Task ResetStaffPinAsync(int userId, string newPin, int performedByUserId, CancellationToken cancellationToken = default)
     {
-        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
+        await EnsureAccountPinManagerAsync(performedByUserId, cancellationToken);
         if (userId == performedByUserId) throw new InvalidOperationException("Use the Change my PIN section to update your own PIN.");
         if (newPin.Length < 4) throw new InvalidOperationException("The new PIN must contain at least four digits.");
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken) ?? throw new InvalidOperationException("Select an active staff account.");
@@ -118,5 +118,10 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
     {
         if (!await db.Users.AnyAsync(x => x.Id == userId && x.IsActive && (x.Role == UserRole.Manager || x.Role == UserRole.Admin), cancellationToken))
             throw new InvalidOperationException("Only a manager or administrator can create role accounts.");
+    }
+    private async Task EnsureAccountPinManagerAsync(int userId, CancellationToken cancellationToken)
+    {
+        if (!await db.Users.AnyAsync(x => x.Id == userId && x.IsActive && (x.Role == UserRole.Manager || x.Role == UserRole.Admin), cancellationToken))
+            throw new InvalidOperationException("Only a manager or administrator can reset account PINs.");
     }
 }
