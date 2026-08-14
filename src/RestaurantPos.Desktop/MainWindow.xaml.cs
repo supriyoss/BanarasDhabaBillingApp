@@ -21,7 +21,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private OrderType? pendingOrderType;
     private int? pendingTableId;
     private string? selectedTableLabel;
-    private readonly System.Windows.Controls.ComboBox menuCategoryFilter = new() { MinWidth = 180, Margin = new Thickness(0, 8, 0, 0), DisplayMemberPath = "Name" };
+    private readonly System.Windows.Controls.ComboBox menuCategoryFilter = new() { Width = 210, Margin = new Thickness(8, 0, 0, 0), DisplayMemberPath = "Name" };
     private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
     private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
     private readonly System.Windows.Controls.PasswordBox confirmStaffPinInput = new() { Margin = new Thickness(4), Height = 34, Padding = new Thickness(9, 6, 9, 6) };
@@ -37,7 +37,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
     private readonly System.Windows.Controls.ComboBox editMenuCategorySelector = new() { MinWidth = 165, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.TextBox editMenuNameInput = new() { MinWidth = 190, Margin = new Thickness(4) };
-    private readonly System.Windows.Controls.TextBox editMenuPriceInput = new() { Width = 95, Margin = new Thickness(4) };
+    private readonly System.Windows.Controls.TextBox editMenuPriceInput = new() { Width = 110, Margin = new Thickness(4), TextAlignment = TextAlignment.Right };
+    private System.Windows.Controls.Border? menuEditorCard;
     private bool choosingDineIn;
     private DiscountType selectedDiscountType = DiscountType.Percentage;
     private PaymentMethod selectedPaymentMethod = PaymentMethod.Cash;
@@ -68,13 +69,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         BuildFloorPlanEditorScreen();
         ConfigureRoleAccountForm();
         ConfigureOperationalGrids();
+        ConfigureNumericColumnAlignment();
         ConfigureMenuEditor();
         CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
-        if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader) menuHeader.Children.Add(menuCategoryFilter);
+        if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader)
+        {
+            var filterBar = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+            filterBar.Children.Add(new System.Windows.Controls.TextBlock { Text = "Category", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            filterBar.Children.Add(menuCategoryFilter);
+            menuHeader.Children.Add(filterBar);
+        }
         if (NewMenuCategorySelector.Parent is System.Windows.Controls.Panel categoryHost) { NewMenuCategorySelector.Visibility = Visibility.Collapsed; categoryHost.Children.Add(managementCategorySelector); }
         NewMenuPriceInput.ToolTip = "Menu item price must be greater than 0";
-        if (NewMenuPriceInput.Parent is System.Windows.Controls.StackPanel pricePanel) pricePanel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Price must be greater than 0", Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9)), FontSize = 11 });
+        if (NewMenuPriceInput.Parent is System.Windows.Controls.StackPanel pricePanel) pricePanel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Price must be greater than 0", Foreground = new SolidColorBrush(Color.FromRgb(146, 64, 14)), FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(1, 4, 6, 0) });
         foreach (var column in HeldOrdersGrid.Columns.Where(x => Equals(x.Header, "Opened")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.OpenedLocal)) { StringFormat = "dd MMM HH:mm" };
         foreach (var column in HistoryGrid.Columns.Where(x => Equals(x.Header, "Closed")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.ClosedLocal)) { StringFormat = "dd MMM yyyy HH:mm" };
         GstRateInput.AcceptsReturn = false;
@@ -189,6 +197,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ConfigureOperationalGrids()
     {
         foreach (var grid in new[] { MenuGrid, CartGrid, HeldOrdersGrid }) { grid.CanUserReorderColumns = false; grid.CanUserResizeColumns = false; grid.RowHeight = 34; grid.SetValue(System.Windows.Controls.ScrollViewer.VerticalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Auto); grid.SetValue(System.Windows.Controls.ScrollViewer.HorizontalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled); }
+        foreach (var grid in new[] { StaffGrid, HistoryGrid })
+        {
+            grid.Style = (Style)FindResource("ModernMenuGrid");
+            grid.CanUserReorderColumns = false;
+            grid.CanUserResizeColumns = false;
+        }
         CartGrid.MaxHeight = 250;
         if (CartGrid.Columns.Count == 3)
         {
@@ -201,19 +215,40 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ConfigureMenuEditor()
     {
         if (AdminMenuGrid.Parent is not System.Windows.Controls.Grid host) return;
-        var editor = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
-        editor.Children.Add(new System.Windows.Controls.TextBlock { Text = "Edit selected:", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
+        var editor = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
+        editor.Children.Add(new System.Windows.Controls.TextBlock { Text = "Edit selected item", FontSize = 16, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) });
         editor.Children.Add(editMenuCategorySelector); editor.Children.Add(editMenuNameInput); editor.Children.Add(editMenuPriceInput);
         var update = new System.Windows.Controls.Button { Content = "Save changes" }; update.Click += UpdateMenuItem_Click; editor.Children.Add(update);
+        menuEditorCard = new System.Windows.Controls.Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(96, 165, 250)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(12), Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed, Child = editor };
         var row = new System.Windows.Controls.RowDefinition { Height = GridLength.Auto }; host.RowDefinitions.Insert(3, row);
-        System.Windows.Controls.Grid.SetRow(editor, 3); host.Children.Add(editor);
-        foreach (FrameworkElement child in host.Children) if (child != editor && System.Windows.Controls.Grid.GetRow(child) >= 3) System.Windows.Controls.Grid.SetRow(child, System.Windows.Controls.Grid.GetRow(child) + 1);
+        System.Windows.Controls.Grid.SetRow(menuEditorCard, 3); host.Children.Add(menuEditorCard);
+        foreach (FrameworkElement child in host.Children) if (child != menuEditorCard && System.Windows.Controls.Grid.GetRow(child) >= 3) System.Windows.Controls.Grid.SetRow(child, System.Windows.Controls.Grid.GetRow(child) + 1);
         AdminMenuGrid.SelectionChanged += (_, _) => PopulateMenuEditor();
+    }
+
+    private void ConfigureNumericColumnAlignment()
+    {
+        var numericHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Price", "Price (INR)", "Rate", "Amount", "Total", "Seats", "Column", "Row", "Width", "Height" };
+        var valueStyle = (Style)FindResource("RightAlignedCellText");
+        var headerStyle = (Style)FindResource("RightAlignedHeader");
+        foreach (var grid in new[] { MenuGrid, CartGrid, HeldOrdersGrid, PaymentsGrid, AdminMenuGrid, StaffGrid, HistoryGrid, AuditGrid })
+        {
+            foreach (var column in grid.Columns.OfType<System.Windows.Controls.DataGridTextColumn>().Where(column => numericHeaders.Contains(column.Header?.ToString() ?? string.Empty)))
+            {
+                column.ElementStyle = valueStyle;
+                column.HeaderStyle = headerStyle;
+            }
+        }
     }
 
     private void PopulateMenuEditor()
     {
-        if (AdminMenuGrid.SelectedItem is not MenuItem item) return;
+        if (AdminMenuGrid.SelectedItems.Count != 1 || AdminMenuGrid.SelectedItem is not MenuItem item)
+        {
+            if (menuEditorCard is not null) menuEditorCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (menuEditorCard is not null) menuEditorCard.Visibility = Visibility.Visible;
         editMenuNameInput.Text = item.Name; editMenuPriceInput.Text = item.UnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
         editMenuCategorySelector.SelectedItem = editMenuCategorySelector.Items.OfType<MenuCategory>().FirstOrDefault(x => x.Id == item.MenuCategoryId);
     }
@@ -439,7 +474,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         try
         {
-            if (AdminMenuGrid.SelectedItem is not MenuItem item) throw new InvalidOperationException("Select one menu item to edit.");
+            if (AdminMenuGrid.SelectedItems.Count != 1 || AdminMenuGrid.SelectedItem is not MenuItem item) throw new InvalidOperationException("Select one menu item to edit.");
             if (editMenuCategorySelector.SelectedItem is not MenuCategory category || !decimal.TryParse(editMenuPriceInput.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var price)) throw new InvalidOperationException("Choose a category and enter a valid price greater than 0.");
             if (price <= 0) throw new InvalidOperationException("Menu item price must be greater than 0.");
             using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IAdministrationService>().UpdateMenuItemAsync(item.Id, category.Id, editMenuNameInput.Text, price, session.CurrentUser!.Id);

@@ -17,9 +17,9 @@
         <Separator Margin="0,4,0,14" Background="{StaticResource BorderBrush}"/>
         <WrapPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Table name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="TableName" Width="130"/></StackPanel>
-          <StackPanel Margin="0,0,10,10"><TextBlock Text="Seats" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="CapacityInput" Width="70" Text="4"/></StackPanel>
-          <StackPanel Margin="0,0,10,10"><TextBlock Text="Column" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="GridXInput" Width="70" Text="0"/></StackPanel>
-          <StackPanel Margin="0,0,10,10"><TextBlock Text="Row" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="GridYInput" Width="70" Text="0"/></StackPanel>
+          <StackPanel Margin="0,0,10,10"><TextBlock Text="Seats" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="CapacityInput" Width="70" Text="4" TextAlignment="Center"/></StackPanel>
+          <StackPanel Margin="0,0,10,10"><TextBlock Text="Column" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="GridXInput" Width="70" Text="0" TextAlignment="Center"/></StackPanel>
+          <StackPanel Margin="0,0,10,10"><TextBlock Text="Row" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="GridYInput" Width="70" Text="0" TextAlignment="Center"/></StackPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Section" FontWeight="SemiBold" Margin="1,0,0,6"/><ComboBox x:Name="SectionSelector" Width="170" DisplayMemberPath="Name"/></StackPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Shape" FontWeight="SemiBold" Margin="1,0,0,6"/><ComboBox x:Name="ShapeSelector" Width="130"/></StackPanel>
           <Button Background="#2563EB" Foreground="White" Content="Add table" Click="AddTable_Click" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
