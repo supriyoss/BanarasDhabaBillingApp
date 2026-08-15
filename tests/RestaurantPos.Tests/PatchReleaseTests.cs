@@ -7,6 +7,14 @@ namespace RestaurantPos.Tests;
 public sealed class PatchReleaseTests
 {
     [Fact]
+    public void Receipt_UsesRestaurantNameAndInvoiceHeading()
+    {
+        Assert.Equal("Banaras Dhaba", WpfReceiptPrinter.RestaurantHeading);
+        Assert.Equal("Invoice", WpfReceiptPrinter.GetInvoiceHeading(false));
+        Assert.Equal("Invoice reprint", WpfReceiptPrinter.GetInvoiceHeading(true));
+    }
+
+    [Fact]
     public void Receipt_DistinguishesDineInAndPackedItems()
     {
         var order = new Order { Lines = new List<OrderLine> { new() { ItemName = "Meal", PreparationMode = PreparationMode.DineIn }, new() { ItemName = "Tea", PreparationMode = PreparationMode.Packed } } };

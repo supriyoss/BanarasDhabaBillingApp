@@ -22,7 +22,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private int? pendingTableId;
     private string? selectedTableLabel;
     private readonly System.Windows.Controls.ComboBox menuCategoryFilter = new() { Width = 210, Margin = new Thickness(8, 0, 0, 0), DisplayMemberPath = "Name" };
-    private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
+    private readonly System.Windows.Controls.ComboBox managementCategorySelector = new() { Height = 40, Margin = new Thickness(0, 4, 10, 0), DisplayMemberPath = "Name", MaxDropDownHeight = 260 };
     private readonly System.Windows.Controls.ComboBox staffRoleSelector = new() { Margin = new Thickness(4), MinHeight = 34 };
     private readonly System.Windows.Controls.PasswordBox confirmStaffPinInput = new() { Margin = new Thickness(4), Height = 34, Padding = new Thickness(9, 6, 9, 6) };
     private readonly System.Windows.Controls.DataGrid applicationAccountGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, SelectionMode = System.Windows.Controls.DataGridSelectionMode.Single, Height = 170, Margin = new Thickness(0, 10, 0, 8) };
@@ -84,6 +84,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             menuHeader.Children.Add(filterBar);
         }
         if (NewMenuCategorySelector.Parent is System.Windows.Controls.Panel categoryHost) { NewMenuCategorySelector.Visibility = Visibility.Collapsed; categoryHost.Children.Add(managementCategorySelector); }
+        NewMenuItemNameInput.Height = 40;
+        NewMenuPriceInput.Height = 40;
         NewMenuPriceInput.ToolTip = "Menu item price must be greater than 0";
         if (NewMenuPriceInput.Parent is System.Windows.Controls.StackPanel pricePanel) pricePanel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Price must be greater than 0", Foreground = new SolidColorBrush(Color.FromRgb(146, 64, 14)), FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(1, 4, 6, 0) });
         foreach (var column in HeldOrdersGrid.Columns.Where(x => Equals(x.Header, "Opened")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.OpenedLocal)) { StringFormat = "dd MMM HH:mm" };
@@ -96,6 +98,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         GstRateInput.VerticalContentAlignment = VerticalAlignment.Center;
         GstRateInput.SetValue(System.Windows.Controls.ScrollViewer.HorizontalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled);
         GstRateInput.SetValue(System.Windows.Controls.ScrollViewer.VerticalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled);
+        var gstUpdateButton = LogicalDescendants(AdminScreen).OfType<System.Windows.Controls.Button>().FirstOrDefault(x => Equals(x.Content, "Update"));
+        if (gstUpdateButton is not null)
+        {
+            gstUpdateButton.Content = "Update GST";
+            gstUpdateButton.Style = (Style)FindResource("PrimaryButton");
+            gstUpdateButton.Padding = new Thickness(14, 8, 14, 8);
+        }
         Loaded += LoadData;
     }
 
@@ -111,7 +120,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         BusinessDate.SelectedDate = DateTime.Today;
         StaffText.Text = $"Current order - {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role})";
         HomeStaffText.Text = $"Signed in as {session.CurrentUser.DisplayName} ({session.CurrentUser.Role})";
-        ServerNameInput.Text = session.CurrentUser.DisplayName;
+        ServerNameInput.Clear();
         var isRestaurantManager = RolePermissions.CanManageRestaurant(session.CurrentUser.Role);
         AdminNavButton.Visibility = IsAdministrator || isRestaurantManager ? Visibility.Visible : Visibility.Collapsed;
         AdminNavButton.Content = IsAdministrator ? "Application" : "Restaurant";
@@ -415,6 +424,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             selectedTableLabel = table.FloorLayout is null ? table.Name : $"{table.FloorLayout.Name} • {table.Name}";
             currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
                 .FindActiveTableOrderAsync(tableId, session.CurrentUser!.Id);
+            ServerNameInput.Text = currentOrder?.ServerName ?? string.Empty;
             pendingOrderType = currentOrder is null ? OrderType.DineIn : null; pendingTableId = currentOrder is null ? tableId : null;
             invoicePrintedForCurrentOrder = false;
             ShowScreen(PosScreen);
@@ -432,6 +442,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         TableSelectionPanel.Visibility = Visibility.Collapsed;
         DineInButton.Style = (Style)FindResource("CompactAction");
         TakeawayButton.Style = (Style)FindResource("PrimaryButton");
+        ServerNameInput.Clear();
         currentOrder = null; pendingOrderType = OrderType.Takeaway; pendingTableId = null; selectedTableLabel = null; ShowScreen(PosScreen); RefreshOrder("New takeaway. Add the first item to start the order.");
         return Task.CompletedTask;
     }
@@ -446,7 +457,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async Task ResumeSelectedHeldOrderAsync()
     {
         if (HeldOrdersGrid.SelectedItem is not Order order) return;
-        try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().OpenTakeawayAsync(order.Id, session.CurrentUser!.Id); invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Takeaway order opened."); }
+        try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().OpenTakeawayAsync(order.Id, session.CurrentUser!.Id); ServerNameInput.Text = currentOrder.ServerName; invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Takeaway order opened."); }
         catch (Exception ex) { ShowError(ex); }
     }
 
@@ -737,8 +748,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CartGrid.ItemsSource = currentOrder?.Lines.ToList();
         var isTakeaway = currentOrder?.Type == OrderType.Takeaway || pendingOrderType == OrderType.Takeaway;
         var dineInLabel = selectedTableLabel ?? currentOrder?.DiningTable?.Name ?? "Selected table";
+        var serverDetail = currentOrder is null ? string.Empty : string.IsNullOrWhiteSpace(currentOrder.ServerName) ? "Server: Not specified" : $"Server: {currentOrder.ServerName}";
         orderContextBanner.Text = isTakeaway ? "TAKEAWAY ORDER" : currentOrder?.Type == OrderType.DineIn || pendingOrderType == OrderType.DineIn ? $"DINE-IN • {dineInLabel}" : "NO ORDER SELECTED";
-        OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : isTakeaway ? "New takeaway order (not saved yet)" : $"New dine-in order for {dineInLabel} (not saved yet)" : isTakeaway ? $"{currentOrder.InvoiceNumber} • Takeaway • Server: {currentOrder.ServerName} • {currentOrder.Status}" : $"{currentOrder.InvoiceNumber} • {dineInLabel} • Server: {currentOrder.ServerName} • {currentOrder.Status}";
+        OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : isTakeaway ? "New takeaway order (not saved yet)" : $"New dine-in order for {dineInLabel} (not saved yet)" : isTakeaway ? $"{currentOrder.InvoiceNumber} • Takeaway • {serverDetail} • {currentOrder.Status}" : $"{currentOrder.InvoiceNumber} • {dineInLabel} • {serverDetail} • {currentOrder.Status}";
+        ServerNameInput.IsEnabled = currentOrder is null && pendingOrderType is not null;
         holdTakeawayButton.Visibility = isTakeaway ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.IsEnabled = currentOrder?.Type == OrderType.Takeaway && currentOrder.Status == OrderStatus.Open;
         LeaveOrderButton.Content = currentOrder?.Type == OrderType.DineIn ? "Return to floor plan" : "Return to home";

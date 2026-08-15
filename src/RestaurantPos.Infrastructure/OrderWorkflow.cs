@@ -43,7 +43,6 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
     {
         await EnsureOperationalUserAsync(userId, cancellationToken);
         serverName = serverName.Trim();
-        if (string.IsNullOrWhiteSpace(serverName)) throw new InvalidOperationException("Enter the server name before opening a bill.");
         if (type == OrderType.DineIn && tableId is null) throw new InvalidOperationException("Select a table for a dine-in order.");
         var datePart = RestaurantTime.ToLocal(DateTime.UtcNow).ToString("yyyyMMdd");
         var next = await db.Orders.CountAsync(o => o.InvoiceNumber.StartsWith($"POS-{datePart}-"), cancellationToken) + 1;

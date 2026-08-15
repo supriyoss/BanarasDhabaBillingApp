@@ -10,6 +10,9 @@ namespace RestaurantPos.Desktop;
 
 public sealed class WpfReceiptPrinter : IReceiptPrinter
 {
+    internal const string RestaurantHeading = "Banaras Dhaba";
+    internal static string GetInvoiceHeading(bool isReprint) => isReprint ? "Invoice reprint" : "Invoice";
+
     public Task<bool> PrintAsync(Order order, bool isReprint, CancellationToken cancellationToken = default)
     {
         var printed = false;
@@ -29,14 +32,15 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
                 ColumnWidth = double.PositiveInfinity
             };
 
-            document.Blocks.Add(Paragraph("RESTAURANT POS", TextAlignment.Center, FontWeights.Bold, 12));
-            document.Blocks.Add(Paragraph(isReprint ? "INVOICE REPRINT" : "TAX INVOICE", TextAlignment.Center, FontWeights.Bold, margin: new Thickness(0, 1, 0, 7)));
+            document.Blocks.Add(Paragraph(RestaurantHeading, TextAlignment.Center, FontWeights.Bold, 12));
+            document.Blocks.Add(Paragraph(GetInvoiceHeading(isReprint), TextAlignment.Center, FontWeights.Bold, margin: new Thickness(0, 1, 0, 7)));
 
             var receiptDate = RestaurantTime.ToLocal(order.ClosedUtc ?? order.OpenedUtc);
             document.Blocks.Add(DetailsTable(
                 $"Invoice: {order.InvoiceNumber}", $"Type: {order.Type}",
                 $"Date: {receiptDate:dd-MM-yyyy}", $"Time: {receiptDate:HH:mm}"));
-            document.Blocks.Add(Paragraph($"Server: {order.ServerName}", margin: new Thickness(0, 0, 0, 5)));
+            if (!string.IsNullOrWhiteSpace(order.ServerName))
+                document.Blocks.Add(Paragraph($"Server: {order.ServerName}", margin: new Thickness(0, 0, 0, 5)));
 
             var items = new Table { CellSpacing = 0, Margin = new Thickness(0) };
             items.Columns.Add(new TableColumn { Width = new GridLength(50, GridUnitType.Star) });

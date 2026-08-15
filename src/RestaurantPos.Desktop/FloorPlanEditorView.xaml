@@ -3,19 +3,23 @@
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,16">
       <StackPanel DockPanel.Dock="Left"><TextBlock Text="Floor plan editor" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Create floors and sections, then place tables on the selected floor." Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/></StackPanel>
-      <Button DockPanel.Dock="Right" Content="Done" Click="Done_Click" Background="#2563EB" Foreground="White" Padding="18,9"/>
+      <Button DockPanel.Dock="Right" Content="Done" Click="Done_Click" Padding="12,7" MinWidth="72" VerticalAlignment="Top"/>
     </DockPanel>
     <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" CornerRadius="12" Padding="18" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
       <StackPanel>
+        <TextBlock Text="Floor and section setup" FontSize="17" FontWeight="SemiBold"/>
+        <TextBlock Text="Create a floor, or add a section to the floor selected in the table area below." Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,10"/>
         <WrapPanel>
-          <StackPanel Margin="0,0,14,10"><TextBlock Text="Floor" FontWeight="SemiBold" Margin="1,0,0,6"/><ComboBox x:Name="LayoutSelector" Width="200" DisplayMemberPath="Name" SelectionChanged="LayoutChanged"/></StackPanel>
-          <StackPanel Margin="0,0,8,10"><TextBlock Text="New floor name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewLayoutName" Width="170"/></StackPanel>
-          <Button Content="Add floor" Click="AddLayout_Click" VerticalAlignment="Bottom" Margin="0,0,18,10"/>
-          <StackPanel Margin="0,0,8,10"><TextBlock Text="New section name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewSectionName" Width="170"/></StackPanel>
+          <StackPanel Margin="0,0,8,10"><TextBlock Text="New floor name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewLayoutName" Width="190"/></StackPanel>
+          <Button Content="Add floor" Click="AddLayout_Click" VerticalAlignment="Bottom" Margin="0,0,22,10"/>
+          <StackPanel Margin="0,0,8,10"><TextBlock Text="New section name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewSectionName" Width="190"/></StackPanel>
           <Button Content="Add section" Click="AddSection_Click" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
         </WrapPanel>
         <Separator Margin="0,4,0,14" Background="{StaticResource BorderBrush}"/>
+        <TextBlock Text="Add table" FontSize="17" FontWeight="SemiBold"/>
+        <TextBlock Text="Choose the destination floor, then enter the table details." Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,10"/>
         <WrapPanel>
+          <StackPanel Margin="0,0,10,10"><TextBlock Text="Floor for table" FontWeight="SemiBold" Margin="1,0,0,6"/><ComboBox x:Name="LayoutSelector" Width="180" DisplayMemberPath="Name" SelectionChanged="LayoutChanged"/></StackPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Table name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="TableName" Width="130"/></StackPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Seats" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="CapacityInput" Width="70" Text="4" TextAlignment="Center"/></StackPanel>
           <StackPanel Margin="0,0,10,10"><TextBlock Text="Column" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="GridXInput" Width="70" Text="0" TextAlignment="Center"/></StackPanel>
