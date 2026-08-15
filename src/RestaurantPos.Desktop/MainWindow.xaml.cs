@@ -32,11 +32,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private FloorPlanEditorView? floorPlanEditorView;
     private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 190, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.White, MinHeight = 520, MinWidth = 850 };
-    private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "Dining" };
+    private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "DINE-IN" };
     private IReadOnlyList<FloorPlanView> diningLayouts = [];
     private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
     private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Save open takeaway", Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Button updateServerNameButton = new() { Content = "Update server", Visibility = Visibility.Collapsed };
+    private FrameworkElement? serverNameEditorRow;
     private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
     private readonly System.Windows.Controls.ComboBox editMenuCategorySelector = new() { MinWidth = 165, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.TextBox editMenuNameInput = new() { MinWidth = 190, Margin = new Thickness(4) };
@@ -219,12 +220,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             grid.CanUserReorderColumns = false;
             grid.CanUserResizeColumns = false;
         }
+        CartGrid.Style = (Style)FindResource("ModernMenuGrid");
+        CartGrid.RowHeight = 46;
+        CartGrid.ColumnHeaderHeight = 40;
         CartGrid.MaxHeight = 250;
         if (CartGrid.Columns.Count == 3)
         {
-            CartGrid.Columns[1].Width = 92; CartGrid.Columns[2].Header = "Total"; CartGrid.Columns[2].Width = 82;
-            CartGrid.Columns.Insert(2, new System.Windows.Controls.DataGridTextColumn { Header = "Rate", Binding = new System.Windows.Data.Binding(nameof(OrderLine.UnitPrice)) { StringFormat = "N2" }, Width = 82 });
-            CartGrid.Columns.Insert(3, new System.Windows.Controls.DataGridTextColumn { Header = "Mode", Binding = new System.Windows.Data.Binding(nameof(OrderLine.PreparationMode)), Width = 76 });
+            var centeredCellStyle = (Style)FindResource("CenteredStaffCellText");
+            var centeredHeaderStyle = (Style)FindResource("CenteredStaffHeader");
+            var itemCellStyle = new Style(typeof(System.Windows.Controls.TextBlock), (Style)FindResource("CenteredCellText"));
+            itemCellStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(16, 0, 10, 0)));
+
+            if (CartGrid.Columns[0] is System.Windows.Controls.DataGridTextColumn itemColumn) itemColumn.ElementStyle = itemCellStyle;
+            CartGrid.Columns[1].Width = 112;
+            CartGrid.Columns[1].HeaderStyle = centeredHeaderStyle;
+            CartGrid.Columns[2].Header = "Total";
+            CartGrid.Columns[2].Width = 100;
+            CartGrid.Columns.Insert(2, new System.Windows.Controls.DataGridTextColumn { Header = "Rate", Binding = new System.Windows.Data.Binding(nameof(OrderLine.UnitPrice)) { StringFormat = "N2" }, Width = 90 });
+            CartGrid.Columns.Insert(3, new System.Windows.Controls.DataGridTextColumn { Header = "Mode", Binding = new System.Windows.Data.Binding(nameof(OrderLine.PreparationMode)), Width = 90, ElementStyle = centeredCellStyle, HeaderStyle = centeredHeaderStyle });
         }
     }
 
@@ -312,10 +325,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ConfigureServerNameEditor()
     {
         if (ServerNameInput.Parent is not System.Windows.Controls.Panel serverRow) return;
+        if (serverRow.Parent is System.Windows.Controls.Panel legacyHost) legacyHost.Children.Remove(serverRow);
+        if (OrderInfoText.Parent is not System.Windows.Controls.Panel orderDetails) return;
+
+        serverNameEditorRow = serverRow;
+        serverNameEditorRow.Margin = new Thickness(0, 6, 0, 4);
+        serverNameEditorRow.Visibility = Visibility.Collapsed;
+        if (serverRow.Children.OfType<System.Windows.Controls.TextBlock>().FirstOrDefault() is { } serverLabel)
+        {
+            serverLabel.MinWidth = 155;
+            serverLabel.VerticalAlignment = VerticalAlignment.Center;
+        }
+        ServerNameInput.Width = 240;
+        ServerNameInput.Height = 40;
+        ServerNameInput.Margin = new Thickness(12, 0, 8, 0);
+        ServerNameInput.Padding = new Thickness(10, 0, 10, 0);
+        ServerNameInput.AcceptsReturn = false;
+        ServerNameInput.TextWrapping = TextWrapping.NoWrap;
+        ServerNameInput.VerticalContentAlignment = VerticalAlignment.Center;
+        ServerNameInput.SetValue(System.Windows.Controls.ScrollViewer.HorizontalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled);
+        ServerNameInput.SetValue(System.Windows.Controls.ScrollViewer.VerticalScrollBarVisibilityProperty, System.Windows.Controls.ScrollBarVisibility.Disabled);
         updateServerNameButton.Style = (Style)FindResource("CompactAction");
+        updateServerNameButton.Width = 120;
+        updateServerNameButton.Height = 40;
+        updateServerNameButton.Margin = new Thickness(0);
+        updateServerNameButton.Padding = new Thickness(12, 0, 12, 0);
+        updateServerNameButton.VerticalAlignment = VerticalAlignment.Center;
         updateServerNameButton.ToolTip = "Save the server name on this open order";
         updateServerNameButton.Click += UpdateServerName_Click;
         serverRow.Children.Add(updateServerNameButton);
+        orderDetails.Children.Insert(orderDetails.Children.IndexOf(OrderInfoText), serverRow);
     }
 
     private async Task LoadApplicationAccountsAsync()
@@ -789,6 +828,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var serverDetail = currentOrder is null ? string.Empty : string.IsNullOrWhiteSpace(currentOrder.ServerName) ? "Server: Not specified" : $"Server: {currentOrder.ServerName}";
         orderContextBanner.Text = isTakeaway ? "TAKEAWAY ORDER" : currentOrder?.Type == OrderType.DineIn || pendingOrderType == OrderType.DineIn ? $"DINE-IN • {dineInLabel}" : "NO ORDER SELECTED";
         OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : isTakeaway ? "New takeaway order (not saved yet)" : $"New dine-in order for {dineInLabel} (not saved yet)" : isTakeaway ? $"{currentOrder.InvoiceNumber} • Takeaway • {serverDetail} • {currentOrder.Status}" : $"{currentOrder.InvoiceNumber} • {dineInLabel} • {serverDetail} • {currentOrder.Status}";
+        if (serverNameEditorRow is not null) serverNameEditorRow.Visibility = pendingOrderType is not null || currentOrder is not null ? Visibility.Visible : Visibility.Collapsed;
         ServerNameInput.IsEnabled = pendingOrderType is not null || currentOrder?.Status == OrderStatus.Open;
         updateServerNameButton.Visibility = currentOrder?.Status == OrderStatus.Open ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.Visibility = isTakeaway ? Visibility.Visible : Visibility.Collapsed;

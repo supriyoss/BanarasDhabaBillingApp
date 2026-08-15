@@ -33,6 +33,7 @@ appsettings.Development.json
 
 # Publishing and installer tooling
 publish/
+.wix/
 installer/.wix/
 *.wixpdb
 *.msi

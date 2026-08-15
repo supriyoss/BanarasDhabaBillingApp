@@ -1,21 +1,52 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Restaurant POS"
-           Manufacturer="Restaurant POS"
-           Version="3.3.2"
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Banaras Dhaba POS"
+           Manufacturer="Banaras Dhaba"
+           Version="3.3.5"
            UpgradeCode="{C2E1C6F0-50E9-43DC-95E5-03B7B43574B7}"
            Scope="perMachine">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Restaurant POS is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Banaras Dhaba POS is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <Property Id="REMOVEUSERDATA" Value="0" Secure="yes" />
+    <Property Id="RESTAURANTPOSDATADIR" Secure="yes" />
+    <SetProperty Id="RESTAURANTPOSDATADIR"
+                 Value="[LocalAppDataFolder]RestaurantPos"
+                 Before="Wix4RemoveFoldersEx_X64"
+                 Sequence="execute"
+                 Condition="REMOVEUSERDATA = 1 AND REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+
+    <UI>
+      <Dialog Id="RemoveUserDataDlg" Width="370" Height="190" Title="[ProductName] Setup" NoMinimize="yes">
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="330" Height="24" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Remove local restaurant data?" />
+        <Control Id="Description" Type="Text" X="20" Y="50" Width="330" Height="45" Transparent="yes" NoPrefix="yes" Text="Do you also want to remove the local database, backups, and application data? Choose Keep data if you may reinstall or need the sales history." />
+        <Control Id="Warning" Type="Text" X="20" Y="104" Width="330" Height="25" Transparent="yes" NoPrefix="yes" Text="Removing this data cannot be undone." />
+        <Control Id="KeepData" Type="PushButton" X="190" Y="148" Width="78" Height="20" Default="yes" Cancel="yes" Text="Keep data">
+          <Publish Property="REMOVEUSERDATA" Value="0" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="RemoveData" Type="PushButton" X="274" Y="148" Width="76" Height="20" Text="Remove data">
+          <Publish Property="REMOVEUSERDATA" Value="1" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+      </Dialog>
+      <InstallUISequence>
+        <Show Dialog="RemoveUserDataDlg" Before="CostInitialize" Condition="Installed AND REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt;= 4" />
+      </InstallUISequence>
+    </UI>
+
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="Restaurant POS" />
+      <Directory Id="INSTALLFOLDER" Name="Banaras Dhaba POS" />
     </StandardDirectory>
 
     <Feature Id="MainFeature" Title="Restaurant POS" Level="1">
       <Component Id="ApplicationLauncher" Directory="INSTALLFOLDER" Bitness="always64">
         <File Id="RestaurantPosExecutable" Source="$(var.PublishDir)\RestaurantPos.Desktop.exe" KeyPath="yes">
-          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Restaurant POS" WorkingDirectory="INSTALLFOLDER" />
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Banaras Dhaba POS" WorkingDirectory="INSTALLFOLDER" />
         </File>
+        <util:RemoveFolderEx Id="RemoveRestaurantPosData" Property="RESTAURANTPOSDATADIR" On="uninstall" Condition="REMOVEUSERDATA = 1 AND REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
       </Component>
       <Files Include="$(var.PublishDir)\*.dll" Directory="INSTALLFOLDER" />
       <Files Include="$(var.PublishDir)\*.json" Directory="INSTALLFOLDER" />
