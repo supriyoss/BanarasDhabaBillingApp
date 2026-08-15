@@ -2,9 +2,12 @@ using RestaurantPos.Domain;
 
 namespace RestaurantPos.Application;
 
+public enum ReceiptPaperWidth { Mm58 = 58, Mm80 = 80 }
+
 public interface IReceiptPrinter
 {
-    Task<bool> PrintAsync(Order order, bool isReprint, CancellationToken cancellationToken = default);
+    Task<bool> PrintAsync(Order order, bool isReprint, ReceiptPaperWidth paperWidth, CancellationToken cancellationToken = default);
+    Task ExportPdfAsync(Order order, bool isReprint, string filePath, ReceiptPaperWidth paperWidth = ReceiptPaperWidth.Mm80, CancellationToken cancellationToken = default);
 }
 
 public interface IBackupService

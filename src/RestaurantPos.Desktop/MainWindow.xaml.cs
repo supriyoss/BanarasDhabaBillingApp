@@ -18,6 +18,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly UserSession session;
     private readonly LocalBackupScheduler backupScheduler;
     private Order? currentOrder;
+    private Order? lastPaidOrder;
     private OrderType? pendingOrderType;
     private int? pendingTableId;
     private string? selectedTableLabel;
@@ -29,7 +30,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.PasswordBox applicationResetPinInput = new() { Width = 150, Margin = new Thickness(8, 0, 8, 0) };
     private readonly System.Windows.Controls.Grid diningScreen = new() { Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Grid floorPlanEditorScreen = new() { Visibility = Visibility.Collapsed };
-    private FloorPlanEditorView? floorPlanEditorView;
+    private InteractiveFloorPlanEditorView? floorPlanEditorView;
     private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 190, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.White, MinHeight = 520, MinWidth = 850 };
     private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "DINE-IN" };
@@ -186,7 +187,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void BuildFloorPlanEditorScreen()
     {
         if (HomeScreen.Parent is not System.Windows.Controls.Grid host) return;
-        floorPlanEditorView = new FloorPlanEditorView(scopeFactory, session);
+        floorPlanEditorView = new InteractiveFloorPlanEditorView(scopeFactory, session);
         floorPlanEditorView.DoneRequested += async (_, _) =>
         {
             await LoadDiningFloorAsync();
@@ -770,6 +771,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (currentOrder?.Status != OrderStatus.Paid) return;
         var paidOrder = currentOrder;
         var printMessage = await PrintReceiptAsync(paidOrder, false);
+        lastPaidOrder = paidOrder;
+        LastReceiptText.Text = $"{paidOrder.InvoiceNumber} • {paidOrder.GrandTotal:N2}";
+        LastReceiptPanel.Visibility = Visibility.Visible;
         currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; invoicePrintedForCurrentOrder = false;
         RefreshOrder(string.Empty); ShowScreen(HomeScreen);
         HomeStaffText.Text = $"{printMessage} Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
@@ -805,12 +809,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         UpiPaymentButton.Style = (Style)FindResource(method == PaymentMethod.Upi ? "PrimaryButton" : "CompactAction");
     }
     private async void Reprint_Click(object sender, RoutedEventArgs e) { if (currentOrder is not null) await PrintReceiptAsync(currentOrder, true); }
+    private ReceiptPaperWidth SelectedReceiptPaperWidth => ReceiptPaperSelector.SelectedIndex == 0 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
     private async Task<string> PrintReceiptAsync(Order order, bool isReprint)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(order, isReprint);
+            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(order, isReprint, SelectedReceiptPaperWidth);
             if (!printed) { StatusText.Text = "Payment completed; printing was cancelled."; return "Payment completed; printing was cancelled."; }
             invoicePrintedForCurrentOrder = true;
             ReprintButton.Visibility = Visibility.Visible;
@@ -818,6 +823,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return StatusText.Text;
         }
         catch (Exception ex) { StatusText.Text = $"Payment completed; invoice printing failed: {ex.Message}"; return StatusText.Text; }
+    }
+    private async void ExportLastReceiptPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (lastPaidOrder is null) return;
+        var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Export compact receipt PDF", Filter = "PDF document (*.pdf)|*.pdf", DefaultExt = ".pdf", AddExtension = true, FileName = $"{lastPaidOrder.InvoiceNumber}.pdf" };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().ExportPdfAsync(lastPaidOrder, false, dialog.FileName, SelectedReceiptPaperWidth);
+            HomeStaffText.Text = $"Compact receipt PDF saved to {dialog.FileName}. Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
+        }
+        catch (Exception ex) { HomeStaffText.Text = $"PDF export failed: {ex.Message}"; }
     }
     private async Task ApplyAsync(Func<IOrderWorkflow, Task<Order>> action, string message) { try { using var scope = scopeFactory.CreateScope(); currentOrder = await action(scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()); RefreshOrder(message); } catch (Exception ex) { ShowError(ex); } }
     private void RefreshOrder(string message)

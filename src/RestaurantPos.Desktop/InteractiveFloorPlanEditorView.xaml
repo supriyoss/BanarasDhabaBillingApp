@@ -1,0 +1,31 @@
+<UserControl x:Class="RestaurantPos.Desktop.InteractiveFloorPlanEditorView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <UserControl.Resources>
+    <DrawingBrush x:Key="FloorGridBrush" TileMode="Tile" Viewport="0,0,90,72" ViewportUnits="Absolute"><DrawingBrush.Drawing><GeometryDrawing Brush="#FBFDFF"><GeometryDrawing.Pen><Pen Brush="#DCE6F2" Thickness="1"/></GeometryDrawing.Pen><GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,90,72"/></GeometryDrawing.Geometry></GeometryDrawing></DrawingBrush.Drawing></DrawingBrush>
+  </UserControl.Resources>
+  <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,12" LastChildFill="False">
+      <StackPanel DockPanel.Dock="Left"><TextBlock Text="Floor plan editor" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Select a table, drag it to move, or use its corner handle to resize." Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/></StackPanel>
+      <Button DockPanel.Dock="Right" Content="Done" Click="Done_Click" Width="82" Height="36" Padding="12,6" Margin="0" VerticalAlignment="Top"/>
+    </DockPanel>
+    <Expander Grid.Row="1" Header="Manage floors and sections" IsExpanded="False" Margin="0,0,0,10">
+      <Border Background="{StaticResource SurfaceBrush}" CornerRadius="10" Padding="14" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,7,0,0">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="24"/><ColumnDefinition Width="210"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="0" Margin="0,0,8,0"><TextBlock Text="New floor name" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewLayoutName" Height="40"/></StackPanel><Button Grid.Column="1" Content="Add floor" Click="AddLayout_Click" Height="40" Padding="14,0" VerticalAlignment="Bottom" Margin="0"/>
+          <StackPanel Grid.Column="3" Margin="0,0,8,0"><TextBlock Text="New section on selected floor" FontWeight="SemiBold" Margin="1,0,0,6"/><TextBox x:Name="NewSectionName" Height="40"/></StackPanel><Button Grid.Column="4" Content="Add section" Click="AddSection_Click" Height="40" Padding="14,0" VerticalAlignment="Bottom" Margin="0"/>
+        </Grid>
+      </Border>
+    </Expander>
+    <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" CornerRadius="10" Padding="12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,10">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Left" Width="190" Margin="0,0,12,0"><TextBlock Text="Floor" FontWeight="SemiBold" Margin="1,0,0,5"/><ComboBox x:Name="LayoutSelector" Height="40" DisplayMemberPath="Name" SelectionChanged="LayoutChanged"/></StackPanel>
+        <WrapPanel VerticalAlignment="Bottom"><StackPanel Width="145" Margin="0,0,8,0"><TextBlock Text="New table" FontWeight="SemiBold" Margin="1,0,0,5"/><TextBox x:Name="TableName" Height="40" ToolTip="Table name"/></StackPanel><StackPanel Width="70" Margin="0,0,8,0"><TextBlock Text="Seats" FontWeight="SemiBold" Margin="1,0,0,5"/><TextBox x:Name="CapacityInput" Height="40" Padding="0" Text="4" TextAlignment="Center"/></StackPanel><StackPanel Width="150" Margin="0,0,8,0"><TextBlock Text="Section" FontWeight="SemiBold" Margin="1,0,0,5"/><ComboBox x:Name="SectionSelector" Height="40" DisplayMemberPath="Name"/></StackPanel><StackPanel Width="120" Margin="0,0,8,0"><TextBlock Text="Shape" FontWeight="SemiBold" Margin="1,0,0,5"/><ComboBox x:Name="ShapeSelector" Height="40"/></StackPanel><Button Background="#2563EB" Foreground="White" Content="Add to floor" Click="AddTable_Click" Height="40" Padding="16,0" VerticalAlignment="Bottom" Margin="0"/></WrapPanel>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Row="3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="270"/></Grid.ColumnDefinitions>
+      <Border Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10" Margin="0,0,12,0"><ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"><Canvas x:Name="PlanCanvas" Width="1080" Height="648" Background="{StaticResource FloorGridBrush}" ClipToBounds="True"/></ScrollViewer></Border>
+      <Border Grid.Column="1" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="16"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="Selected table" FontSize="18" FontWeight="SemiBold"/><TextBlock x:Name="SelectionHint" Text="Select a table on the grid." Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,14"/><StackPanel x:Name="SelectedTablePanel" IsEnabled="False"><TextBlock Text="Name" FontWeight="SemiBold" Margin="1,0,0,5"/><TextBox x:Name="SelectedTableName" Height="40" Margin="0,0,0,10"/><TextBlock Text="Seats" FontWeight="SemiBold" Margin="1,0,0,5"/><TextBox x:Name="SelectedCapacity" Height="40" TextAlignment="Center" Margin="0,0,0,10"/><TextBlock Text="Section" FontWeight="SemiBold" Margin="1,0,0,5"/><ComboBox x:Name="SelectedSection" Height="40" DisplayMemberPath="Name" Margin="0,0,0,10"/><TextBlock Text="Shape" FontWeight="SemiBold" Margin="1,0,0,5"/><ComboBox x:Name="SelectedShape" Height="40" Margin="0,0,0,12"/><Button Background="#2563EB" Foreground="White" Content="Save table details" Click="SaveSelectedTable_Click" Margin="0,0,0,6"/><Button Content="Remove from floor" Click="DeactivateSelectedTable_Click" Margin="0"/></StackPanel><Border Background="#EFF6FF" CornerRadius="8" Padding="10" Margin="0,16,0,0"><TextBlock Text="Movement and resizing snap to the grid. Changes save when you release the table or handle." Foreground="#1D4ED8" TextWrapping="Wrap"/></Border></StackPanel></ScrollViewer></Border>
+    </Grid>
+    <Border Grid.Row="4" Background="#EFF6FF" CornerRadius="8" Padding="12,8" Margin="0,10,0,0"><TextBlock x:Name="EditorStatusText" Foreground="#1D4ED8" TextWrapping="Wrap"/></Border>
+  </Grid>
+</UserControl>

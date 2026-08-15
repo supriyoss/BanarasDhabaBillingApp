@@ -37,6 +37,18 @@ public sealed class FloorPlanServiceTests
     }
 
     [Fact]
+    public async Task Manager_CanMoveAndResizeTableFromVisualEditor()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var layout = await fixture.Service.AddLayoutAsync("Terrace", fixture.ManagerId);
+        var table = await fixture.Service.AddTableAsync(layout.Id, null, "T1", 4, 0, 0, TableShape.Square, fixture.ManagerId);
+
+        var updated = await fixture.Service.UpdateTableAsync(table.Id, table.Name, table.Capacity, 4, 3, 2, 2, TableShape.Rectangle, null, true, fixture.ManagerId);
+
+        Assert.Equal((4, 3, 2, 2, TableShape.Rectangle), (updated.GridX, updated.GridY, updated.GridWidth, updated.GridHeight, updated.Shape));
+    }
+
+    [Fact]
     public async Task Cashier_CannotEditFloorPlan()
     {
         await using var fixture = await Fixture.CreateAsync();

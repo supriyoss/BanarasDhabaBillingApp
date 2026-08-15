@@ -13,7 +13,7 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
     internal const string RestaurantHeading = "Banaras Dhaba";
     internal static string GetInvoiceHeading(bool isReprint) => isReprint ? "Invoice reprint" : "Invoice";
 
-    public Task<bool> PrintAsync(Order order, bool isReprint, CancellationToken cancellationToken = default)
+    public Task<bool> PrintAsync(Order order, bool isReprint, ReceiptPaperWidth paperWidth, CancellationToken cancellationToken = default)
     {
         var printed = false;
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -21,7 +21,9 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
             var dialog = new PrintDialog();
             if (dialog.ShowDialog() != true) return;
 
-            var receiptWidth = Math.Min(dialog.PrintableAreaWidth, 280d);
+            var requestedWidth = GetPaperWidth(paperWidth);
+            TrySetPrinterPaperWidth(dialog, requestedWidth);
+            var receiptWidth = Math.Min(dialog.PrintableAreaWidth > 0 ? dialog.PrintableAreaWidth : requestedWidth, requestedWidth);
             var document = new FlowDocument
             {
                 PagePadding = new Thickness(6),
@@ -71,6 +73,27 @@ public sealed class WpfReceiptPrinter : IReceiptPrinter
             printed = true;
         });
         return Task.FromResult(printed);
+    }
+
+    public Task ExportPdfAsync(Order order, bool isReprint, string filePath, ReceiptPaperWidth paperWidth = ReceiptPaperWidth.Mm80, CancellationToken cancellationToken = default) =>
+        CompactPdfReceiptExporter.WriteAsync(order, isReprint, filePath, paperWidth, cancellationToken);
+
+    internal static double GetPaperWidth(ReceiptPaperWidth paperWidth) => (int)paperWidth / 25.4d * 96d;
+
+    private static void TrySetPrinterPaperWidth(PrintDialog dialog, double width)
+    {
+        try
+        {
+            var ticket = dialog.PrintTicket;
+            var height = ticket.PageMediaSize?.Height ?? dialog.PrintableAreaHeight;
+            if (height > 0) ticket.PageMediaSize = new PageMediaSize(width, height);
+            ticket.PageOrientation = PageOrientation.Portrait;
+            dialog.PrintTicket = ticket;
+        }
+        catch (PrintSystemException)
+        {
+            // Some thermal drivers reject custom media. The FlowDocument still constrains content to the selected roll width.
+        }
     }
 
     private static Paragraph Paragraph(string text, TextAlignment alignment = TextAlignment.Left, FontWeight? weight = null,

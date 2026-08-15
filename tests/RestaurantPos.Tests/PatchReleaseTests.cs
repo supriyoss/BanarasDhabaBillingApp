@@ -1,3 +1,4 @@
+using RestaurantPos.Application;
 using RestaurantPos.Desktop;
 using RestaurantPos.Domain;
 using Xunit;
@@ -21,6 +22,36 @@ public sealed class PatchReleaseTests
         Assert.Equal(new[] { "DINE IN", "TAKEAWAY / PACK" }, WpfReceiptPrinter.GetReceiptGroups(order).Select(x => x.Heading));
     }
 
+    [Theory]
+    [InlineData(ReceiptPaperWidth.Mm58, 219.21)]
+    [InlineData(ReceiptPaperWidth.Mm80, 302.36)]
+    public void PhysicalReceipt_UsesSelectedThermalPaperWidth(ReceiptPaperWidth paperWidth, double expectedDip)
+    {
+        Assert.Equal(expectedDip, WpfReceiptPrinter.GetPaperWidth(paperWidth), 2);
+    }
+
+    [Fact]
+    public void CompactPdf_HeightTracksActualReceiptContent()
+    {
+        var shortOrder = ReceiptOrder(1);
+        var longOrder = ReceiptOrder(20);
+
+        var shortHeight = CompactPdfReceiptExporter.CalculatePageHeight(shortOrder, false, ReceiptPaperWidth.Mm80);
+        var longHeight = CompactPdfReceiptExporter.CalculatePageHeight(longOrder, false, ReceiptPaperWidth.Mm80);
+        var pdf = CompactPdfReceiptExporter.BuildPdf(shortOrder, false, ReceiptPaperWidth.Mm80);
+
+        Assert.True(longHeight > shortHeight);
+        Assert.StartsWith("%PDF-1.4", System.Text.Encoding.Latin1.GetString(pdf));
+    }
+
+    [Fact]
+    public void FloorEditor_SnapsMovementAndFindsAnOpenCell()
+    {
+        Assert.Equal(2, InteractiveFloorPlanEditorView.SnapPosition(181, InteractiveFloorPlanEditorView.CellWidth, 11));
+        var position = InteractiveFloorPlanEditorView.FindNextPosition([new DiningTable { GridX = 0, GridY = 0, GridWidth = 2, GridHeight = 1 }]);
+        Assert.Equal((2, 0), position);
+    }
+
     [Fact]
     public void RestaurantTime_ConvertsUtcOnceToAsiaKolkata()
     {
@@ -28,4 +59,15 @@ public sealed class PatchReleaseTests
         Assert.Equal(new DateTime(2026, 8, 13, 5, 30, 0), RestaurantTime.ToLocal(utc));
         Assert.Equal(new DateTime(2026, 8, 13, 5, 30, 0), RestaurantTime.ToLocal(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified)));
     }
+
+    private static Order ReceiptOrder(int lineCount) => new()
+    {
+        InvoiceNumber = "POS-TEST",
+        Type = OrderType.DineIn,
+        OpenedUtc = DateTime.UtcNow,
+        GstRate = 5,
+        TaxAmount = 10,
+        GrandTotal = 210,
+        Lines = Enumerable.Range(1, lineCount).Select(index => new OrderLine { ItemName = $"Menu item {index}", Quantity = 1, UnitPrice = 10, LineTotal = 10 }).ToList()
+    };
 }
