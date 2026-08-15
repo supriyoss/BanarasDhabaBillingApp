@@ -109,7 +109,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             gstUpdateButton.Padding = new Thickness(14, 8, 14, 8);
         }
         Loaded += LoadData;
+        StateChanged += (_, _) => RestoreWindowButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
     }
+
+    private void WorkspaceTitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (e.ClickCount == 2) { ToggleWindowState(); return; }
+        try { DragMove(); } catch (InvalidOperationException) { }
+    }
+
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void RestoreWindow_Click(object sender, RoutedEventArgs e) => ToggleWindowState();
+    private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
+    private void ToggleWindowState() => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     private async void LoadData(object sender, RoutedEventArgs e)
     {
