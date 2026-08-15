@@ -37,3 +37,6 @@ publish/
 installer/.wix/
 *.wixpdb
 *.msi
+
+# Developer-only signing material (never commit or package)
+.license-keys/

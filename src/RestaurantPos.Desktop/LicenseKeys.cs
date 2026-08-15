@@ -1,0 +1,18 @@
+namespace RestaurantPos.Desktop;
+
+internal static class LicenseKeys
+{
+    internal const string PublicKeyPem = """
+-----BEGIN PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArRY9dV8N/xbWTSyMpfjG
+SwGF4zogzGlckfLJFEvx9w2AA9QmVGvaxc8bARMjiH9TELHaycBg7t07FobRz1qk
+BnAcGE74qAIE0IKbmPj76QZaXXe25Cqu2nh8HlWdXK07ZzEMjbqLutGKURwFbnS0
+zle8HhNrh/opMamrLVDP18DLQA/dhL01K8mSg9ZZlQ3N/4+MD70FGlpq0loTV61O
+2IhRDFjNK2GsyMnQvBu7jdjT2QGEazpl0g/hJAow+QszF+fx5WNDKXASFiwo+qwY
+rDCi4fKkILJZRKZVA0XJ2nON45XAZ5pCLU36sB/Cdp+u3qXDCKyiZtpoD3nk2W4q
+ItdgiROnhLX8708ytQPZVOp63OzVUTm8delIAjOotPuVRjr19/f7gfKez7NQHPkw
+HAQKYz7B7HLULlcVrJh7QFoqezl1IXOhZ8mFwsygnt+Pxj9zG4W6JnXZn57sdaY9
++yMbeO4tbT5/SYh/VO7443FES2ChqC7y1yzFXX5W6p9VAgMBAAE=
+-----END PUBLIC KEY-----
+""";
+}
