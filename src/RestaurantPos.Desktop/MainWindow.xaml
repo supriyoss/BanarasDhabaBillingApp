@@ -43,7 +43,54 @@
           <StackPanel Grid.Row="4" Margin="0,7,0,0"><TextBlock Text="Payment method" FontWeight="SemiBold" Foreground="#334155"/><WrapPanel Margin="0,3,0,0"><Button x:Name="CashPaymentButton" Style="{StaticResource PrimaryButton}" Content="Cash" Click="CashPayment_Click"/><Button x:Name="CardPaymentButton" Style="{StaticResource CompactAction}" Content="Card" Click="CardPayment_Click"/><Button x:Name="UpiPaymentButton" Style="{StaticResource CompactAction}" Content="UPI" Click="UpiPayment_Click"/><Button Style="{StaticResource PrimaryButton}" Content="Pay exact amount" Click="Pay_Click" IsEnabled="{Binding HasActiveOrder}"/><Button x:Name="ReprintButton" Content="Reprint invoice" Click="Reprint_Click" Visibility="Collapsed"/></WrapPanel><StackPanel Orientation="Horizontal" Margin="4,5,0,0"><TextBlock Text="Physical receipt paper" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,8,0"/><ComboBox x:Name="ReceiptPaperSelector" Width="105" Height="34" SelectedIndex="1"><ComboBoxItem Content="58 mm"/><ComboBoxItem Content="80 mm"/></ComboBox></StackPanel><TextBlock x:Name="StatusText" Foreground="#475569" TextWrapping="Wrap" Margin="6"/></StackPanel>
         </Grid></ScrollViewer></Border>
       </Grid>
-      <Border x:Name="HeldOrdersScreen" Style="{StaticResource Card}" Visibility="Collapsed"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><DockPanel Margin="0,0,0,16"><StackPanel DockPanel.Dock="Left"><TextBlock Text="Held orders" FontSize="25" FontWeight="SemiBold" Foreground="#172033"/><TextBlock Text="Resume a saved bill whenever the customer is ready." Foreground="#64748B" Margin="0,3,0,0"/></StackPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Refresh" Click="RefreshHeldOrders_Click"/><Button Style="{StaticResource PrimaryButton}" Content="Resume selected order" Click="ResumeHeldOrder_Click"/></StackPanel></DockPanel><DataGrid Grid.Row="1" x:Name="HeldOrdersGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" MouseDoubleClick="HeldOrdersGrid_DoubleClick"><DataGrid.Columns><DataGridTextColumn Header="Invoice" Binding="{Binding InvoiceNumber}" Width="*"/><DataGridTextColumn Header="Server" Binding="{Binding ServerName}" Width="135"/><DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="110"/><DataGridTextColumn Header="Table" Binding="{Binding DiningTable.Name}" Width="120"/><DataGridTextColumn Header="Opened" Binding="{Binding OpenedUtc, StringFormat={}{0:dd MMM HH:mm}}" Width="145"/><DataGridTextColumn Header="Total" Binding="{Binding GrandTotal, StringFormat={}{0:N2}}" Width="100"/></DataGrid.Columns></DataGrid></Grid></Border>
+      <Border x:Name="HeldOrdersScreen" Style="{StaticResource Card}" Visibility="Collapsed">
+        <Grid>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <DockPanel Margin="0,0,0,16">
+            <StackPanel DockPanel.Dock="Left"><TextBlock Text="Held orders" FontSize="25" FontWeight="SemiBold" Foreground="#172033"/><TextBlock Text="Resume a saved bill whenever the customer is ready." Foreground="#64748B" Margin="0,3,0,0"/></StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Refresh" Click="RefreshHeldOrders_Click"/><Button Style="{StaticResource PrimaryButton}" Content="Resume selected order" Click="ResumeHeldOrder_Click"/></StackPanel>
+          </DockPanel>
+          <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="10">
+            <DataGrid x:Name="HeldOrdersGrid" Style="{StaticResource ModernMenuGrid}" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column" MouseDoubleClick="HeldOrdersGrid_DoubleClick">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Invoice" Width="1.6*">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <Grid Margin="5,0,6,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding InvoiceNumber}" FontWeight="SemiBold" Foreground="#172033" VerticalAlignment="Center"/>
+                        <Border Grid.Column="1" Background="#ECFDF5" CornerRadius="8" Padding="8,3" Margin="12,0,0,0" VerticalAlignment="Center">
+                          <TextBlock Text="TAKEAWAY" Foreground="#047857" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Server" Width="*">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock x:Name="ServerValue" VerticalAlignment="Center" Margin="5,0">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="{Binding ServerName}"/>
+                            <Setter Property="Foreground" Value="#334155"/>
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding ServerName}" Value=""><Setter Property="Text" Value="Not specified"/><Setter Property="Foreground" Value="#94A3B8"/></DataTrigger>
+                              <DataTrigger Binding="{Binding ServerName}" Value="{x:Null}"><Setter Property="Text" Value="Not specified"/><Setter Property="Foreground" Value="#94A3B8"/></DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Opened" Binding="{Binding OpenedUtc, StringFormat={}{0:dd MMM HH:mm}}" Width="155"/>
+                <DataGridTextColumn Header="Total" Binding="{Binding GrandTotal, StringFormat={}{0:N2}}" Width="120"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </Border>
+        </Grid>
+      </Border>
       <Border x:Name="ReportsScreen" Style="{StaticResource Card}" Visibility="Collapsed"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <DockPanel><StackPanel DockPanel.Dock="Left"><TextBlock x:Name="ReportTitleText" Text="Daily sales report" FontSize="25" FontWeight="SemiBold" Foreground="#172033"/><TextBlock x:Name="ReportDescriptionText" Text="Sales, GST, payments, and activity for the selected day." Foreground="#64748B" Margin="0,3,0,0"/></StackPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><DatePicker x:Name="BusinessDate" Margin="4" SelectedDateChanged="BusinessDate_Changed"/><Button Content="Refresh" Click="RefreshReport_Click"/></StackPanel></DockPanel>
         <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="8" Margin="0,18,0,12"><StackPanel Orientation="Horizontal"><TextBlock Text="Report period" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" Margin="4,0,8,0"/><Button x:Name="DailyReportButton" Style="{StaticResource PrimaryButton}" Content="Daily" Click="DailyReport_Click"/><Button x:Name="MonthlyReportButton" Style="{StaticResource CompactAction}" Content="Monthly" Click="MonthlyReport_Click"/><Button x:Name="YearlyReportButton" Style="{StaticResource CompactAction}" Content="Yearly" Click="YearlyReport_Click"/></StackPanel></Border>

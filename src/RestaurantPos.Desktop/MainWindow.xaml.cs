@@ -225,6 +225,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CartGrid.RowHeight = 46;
         CartGrid.ColumnHeaderHeight = 40;
         CartGrid.MaxHeight = 250;
+        HeldOrdersGrid.Style = (Style)FindResource("ModernMenuGrid");
+        HeldOrdersGrid.RowHeight = 54;
+        HeldOrdersGrid.ColumnHeaderHeight = 40;
         if (CartGrid.Columns.Count == 3)
         {
             var centeredCellStyle = (Style)FindResource("CenteredStaffCellText");
