@@ -104,6 +104,17 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         return await LoadAsync(orderId, cancellationToken);
     }
 
+    public async Task<Order> SetServerNameAsync(int orderId, string serverName, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var order = await LoadOpenAsync(orderId, cancellationToken);
+        order.ServerName = serverName.Trim();
+        AddAudit(userId, AuditAction.Updated, "Order", order.InvoiceNumber,
+            string.IsNullOrWhiteSpace(order.ServerName) ? "Cleared server name." : $"Updated server name to {order.ServerName}.");
+        await db.SaveChangesAsync(cancellationToken);
+        return await LoadAsync(orderId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Order>> GetOpenTakeawayOrdersAsync(CancellationToken cancellationToken = default) =>
         await db.Orders.Include(x => x.Lines).Include(x => x.Payments)
             .Where(x => x.Type == OrderType.Takeaway && x.Status == OrderStatus.Held && x.Lines.Any())

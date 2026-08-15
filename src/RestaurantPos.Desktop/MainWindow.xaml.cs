@@ -36,6 +36,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private IReadOnlyList<FloorPlanView> diningLayouts = [];
     private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
     private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Save open takeaway", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Button updateServerNameButton = new() { Content = "Update server", Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
     private readonly System.Windows.Controls.ComboBox editMenuCategorySelector = new() { MinWidth = 165, DisplayMemberPath = "Name", Margin = new Thickness(4) };
     private readonly System.Windows.Controls.TextBox editMenuNameInput = new() { MinWidth = 190, Margin = new Thickness(4) };
@@ -74,6 +75,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ConfigureNumericColumnAlignment();
         ConfigureMenuEditor();
         ConfigureApplicationAccountManagement();
+        ConfigureServerNameEditor();
         CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
         if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader)
@@ -266,23 +268,54 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         applicationAccountGrid.Style = (Style)FindResource("ModernMenuGrid");
         applicationAccountGrid.CanUserReorderColumns = false;
         applicationAccountGrid.CanUserResizeColumns = false;
-        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Account", Binding = new System.Windows.Data.Binding(nameof(AppUser.DisplayName)), Width = new System.Windows.Controls.DataGridLength(1, System.Windows.Controls.DataGridLengthUnitType.Star) });
-        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Role", Binding = new System.Windows.Data.Binding(nameof(AppUser.Role)), Width = new System.Windows.Controls.DataGridLength(140) });
+        applicationAccountGrid.Height = 190;
+        applicationAccountGrid.Margin = new Thickness(0);
+        applicationAccountGrid.RowHeight = 44;
+        var centeredCellStyle = (Style)FindResource("CenteredStaffCellText");
+        var centeredHeaderStyle = (Style)FindResource("CenteredStaffHeader");
+        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Account", Binding = new System.Windows.Data.Binding(nameof(AppUser.DisplayName)), Width = new System.Windows.Controls.DataGridLength(1.15, System.Windows.Controls.DataGridLengthUnitType.Star), ElementStyle = centeredCellStyle, HeaderStyle = centeredHeaderStyle });
+        applicationAccountGrid.Columns.Add(new System.Windows.Controls.DataGridTextColumn { Header = "Role", Binding = new System.Windows.Data.Binding(nameof(AppUser.Role)), Width = new System.Windows.Controls.DataGridLength(0.85, System.Windows.Controls.DataGridLengthUnitType.Star), ElementStyle = centeredCellStyle, HeaderStyle = centeredHeaderStyle });
 
-        var resetRow = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-        resetRow.Children.Add(new System.Windows.Controls.TextBlock { Text = "New PIN *", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        resetRow.Children.Add(applicationResetPinInput);
+        applicationResetPinInput.Width = double.NaN;
+        applicationResetPinInput.Height = 40;
+        applicationResetPinInput.Margin = new Thickness(0, 7, 0, 10);
+        applicationResetPinInput.HorizontalAlignment = HorizontalAlignment.Stretch;
         var resetButton = new System.Windows.Controls.Button { Content = "Reset selected account PIN" };
+        resetButton.Style = (Style)FindResource("PrimaryButton");
+        resetButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         resetButton.Click += ResetApplicationAccountPin_Click;
-        resetRow.Children.Add(resetButton);
+
+        var resetContent = new System.Windows.Controls.StackPanel();
+        resetContent.Children.Add(new System.Windows.Controls.TextBlock { Text = "Assign new PIN", FontSize = 16, FontWeight = FontWeights.SemiBold });
+        resetContent.Children.Add(new System.Windows.Controls.TextBlock { Text = "Enter at least four digits for the selected account.", Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 9) });
+        resetContent.Children.Add(new System.Windows.Controls.TextBlock { Text = "New PIN *", FontWeight = FontWeights.SemiBold });
+        resetContent.Children.Add(applicationResetPinInput);
+        resetContent.Children.Add(resetButton);
+        var resetCard = new System.Windows.Controls.Border { Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)), BorderBrush = new SolidColorBrush(Color.FromRgb(226, 232, 240)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(9), Padding = new Thickness(14), Child = resetContent };
+
+        var workspace = new System.Windows.Controls.Grid { Margin = new Thickness(0, 12, 0, 0) };
+        workspace.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(1.7, GridUnitType.Star) });
+        workspace.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(18) });
+        workspace.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        workspace.Children.Add(applicationAccountGrid);
+        System.Windows.Controls.Grid.SetColumn(resetCard, 2);
+        workspace.Children.Add(resetCard);
 
         var content = new System.Windows.Controls.StackPanel();
         content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Account password reset", FontSize = 18, FontWeight = FontWeights.SemiBold });
         content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Select another active account and assign a new PIN of at least four digits.", Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)), Margin = new Thickness(0, 3, 0, 0) });
-        content.Children.Add(applicationAccountGrid);
-        content.Children.Add(resetRow);
+        content.Children.Add(workspace);
         var card = new System.Windows.Controls.Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(16), Margin = new Thickness(0, 14, 0, 0), Child = content };
         host.Children.Insert(host.Children.IndexOf(ApplicationStatusText), card);
+    }
+
+    private void ConfigureServerNameEditor()
+    {
+        if (ServerNameInput.Parent is not System.Windows.Controls.Panel serverRow) return;
+        updateServerNameButton.Style = (Style)FindResource("CompactAction");
+        updateServerNameButton.ToolTip = "Save the server name on this open order";
+        updateServerNameButton.Click += UpdateServerName_Click;
+        serverRow.Children.Add(updateServerNameButton);
     }
 
     private async Task LoadApplicationAccountsAsync()
@@ -663,6 +696,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (!decimal.TryParse(BillDiscountValueInput.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out var value) || value < 0 || (selectedDiscountType == DiscountType.Percentage && value > 100)) { StatusText.Text = "Enter a valid bill discount value."; return; }
         await ApplyAsync(w => w.SetOrderDiscountAsync(currentOrder.Id, selectedDiscountType, value, session.CurrentUser!.Id), "Bill discount saved.");
     }
+    private async void UpdateServerName_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentOrder?.Status != OrderStatus.Open) return;
+        await ApplyAsync(w => w.SetServerNameAsync(currentOrder.Id, ServerNameInput.Text, session.CurrentUser!.Id), "Server name updated.");
+    }
     private void PercentageDiscount_Click(object sender, RoutedEventArgs e) => SelectDiscountType(DiscountType.Percentage);
     private void FixedDiscount_Click(object sender, RoutedEventArgs e) => SelectDiscountType(DiscountType.FixedAmount);
     private void SelectDiscountType(DiscountType type)
@@ -751,7 +789,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var serverDetail = currentOrder is null ? string.Empty : string.IsNullOrWhiteSpace(currentOrder.ServerName) ? "Server: Not specified" : $"Server: {currentOrder.ServerName}";
         orderContextBanner.Text = isTakeaway ? "TAKEAWAY ORDER" : currentOrder?.Type == OrderType.DineIn || pendingOrderType == OrderType.DineIn ? $"DINE-IN • {dineInLabel}" : "NO ORDER SELECTED";
         OrderInfoText.Text = currentOrder is null ? pendingOrderType is null ? "No active order" : isTakeaway ? "New takeaway order (not saved yet)" : $"New dine-in order for {dineInLabel} (not saved yet)" : isTakeaway ? $"{currentOrder.InvoiceNumber} • Takeaway • {serverDetail} • {currentOrder.Status}" : $"{currentOrder.InvoiceNumber} • {dineInLabel} • {serverDetail} • {currentOrder.Status}";
-        ServerNameInput.IsEnabled = currentOrder is null && pendingOrderType is not null;
+        ServerNameInput.IsEnabled = pendingOrderType is not null || currentOrder?.Status == OrderStatus.Open;
+        updateServerNameButton.Visibility = currentOrder?.Status == OrderStatus.Open ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.Visibility = isTakeaway ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.IsEnabled = currentOrder?.Type == OrderType.Takeaway && currentOrder.Status == OrderStatus.Open;
         LeaveOrderButton.Content = currentOrder?.Type == OrderType.DineIn ? "Return to floor plan" : "Return to home";

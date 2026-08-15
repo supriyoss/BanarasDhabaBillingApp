@@ -34,6 +34,19 @@ public sealed class OrderWorkflowTests
     }
 
     [Fact]
+    public async Task OpenOrder_ServerNameCanBeUpdatedOrCleared()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, string.Empty);
+
+        order = await fixture.Workflow.SetServerNameAsync(order.Id, "  Amit  ", fixture.UserId);
+        Assert.Equal("Amit", order.ServerName);
+
+        order = await fixture.Workflow.SetServerNameAsync(order.Id, string.Empty, fixture.UserId);
+        Assert.Equal(string.Empty, order.ServerName);
+    }
+
+    [Fact]
     public async Task OpenTable_ReopensLegacyHeldDineInOrder()
     {
         await using var fixture = await WorkflowFixture.CreateAsync();

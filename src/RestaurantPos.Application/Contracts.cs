@@ -20,6 +20,7 @@ public interface IOrderWorkflow
     Task<Order> AddMenuItemAsync(int orderId, int menuItemId, PreparationMode preparationMode, int userId, CancellationToken cancellationToken = default);
     Task<Order> ChangeQuantityAsync(int orderId, int lineId, decimal quantity, int userId, CancellationToken cancellationToken = default);
     Task<Order> SetOrderDiscountAsync(int orderId, DiscountType discountType, decimal discountValue, int userId, CancellationToken cancellationToken = default);
+    Task<Order> SetServerNameAsync(int orderId, string serverName, int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetOpenTakeawayOrdersAsync(CancellationToken cancellationToken = default);
     Task<Order> OpenTakeawayAsync(int orderId, int userId, CancellationToken cancellationToken = default);
     Task<Order> SetLinePreparationModeAsync(int orderId, int lineId, PreparationMode mode, int userId, CancellationToken cancellationToken = default);
