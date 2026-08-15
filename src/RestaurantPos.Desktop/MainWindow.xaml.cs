@@ -92,7 +92,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         NewMenuPriceInput.Height = 40;
         NewMenuPriceInput.ToolTip = "Menu item price must be greater than 0";
         if (NewMenuPriceInput.Parent is System.Windows.Controls.StackPanel pricePanel) pricePanel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Price must be greater than 0", Foreground = new SolidColorBrush(Color.FromRgb(146, 64, 14)), FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(1, 4, 6, 0) });
-        foreach (var column in HeldOrdersGrid.Columns.Where(x => Equals(x.Header, "Opened")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.OpenedLocal)) { StringFormat = "dd MMM HH:mm" };
         foreach (var column in HistoryGrid.Columns.Where(x => Equals(x.Header, "Closed")).OfType<System.Windows.Controls.DataGridTextColumn>()) column.Binding = new System.Windows.Data.Binding(nameof(Order.ClosedLocal)) { StringFormat = "dd MMM yyyy HH:mm" };
         GstRateInput.AcceptsReturn = false;
         GstRateInput.TextWrapping = TextWrapping.NoWrap;
