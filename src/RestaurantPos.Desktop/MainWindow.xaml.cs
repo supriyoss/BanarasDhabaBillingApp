@@ -164,15 +164,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         else { ShowScreen(HomeScreen); StatusText.Text = "Choose Dining or Takeaway from Home."; }
     }
 
-    private void ShowHome_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) ShowScreen(HomeScreen); }
+    private void ShowHome_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator && CanNavigateAwayFromCurrentOrder()) ShowScreen(HomeScreen); }
     private void ShowPos_Click(object sender, RoutedEventArgs e) { if (!IsAdministrator) ShowScreen(PosScreen); }
-    private async void ShowHeldOrders_Click(object sender, RoutedEventArgs e) { if (IsAdministrator) return; ShowScreen(HeldOrdersScreen); await LoadHeldOrdersAsync(); }
-    private async void ShowReports_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager) return; ShowScreen(ReportsScreen); await LoadReportAsync(); }
-    private async void ShowMenuManagement_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager) return; ShowScreen(MenuManagementScreen); await LoadMenuManagementAsync(); }
+    private async void ShowHeldOrders_Click(object sender, RoutedEventArgs e) { if (IsAdministrator || !CanNavigateAwayFromCurrentOrder()) return; ShowScreen(HeldOrdersScreen); await LoadHeldOrdersAsync(); }
+    private async void ShowReports_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager || !CanNavigateAwayFromCurrentOrder()) return; ShowScreen(ReportsScreen); await LoadReportAsync(); }
+    private async void ShowMenuManagement_Click(object sender, RoutedEventArgs e) { if (session.CurrentUser?.Role != UserRole.Manager || !CanNavigateAwayFromCurrentOrder()) return; ShowScreen(MenuManagementScreen); await LoadMenuManagementAsync(); }
     private async void ShowAdmin_Click(object sender, RoutedEventArgs e)
     {
         if (IsAdministrator) { ShowScreen(ApplicationMaintenanceScreen); await LoadApplicationAccountsAsync(); return; }
-        if (session.CurrentUser?.Role == UserRole.Manager) { ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
+        if (session.CurrentUser?.Role == UserRole.Manager && CanNavigateAwayFromCurrentOrder()) { ShowScreen(AdminScreen); await LoadAdminDataAsync(); }
     }
     private void ShowScreen(FrameworkElement screen)
     {
@@ -553,7 +553,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void HomeDining_Click(object sender, RoutedEventArgs e) => await OpenDiningFloorAsync();
     private async Task OpenDiningFloorAsync()
     {
-        if (IsAdministrator) return;
+        if (IsAdministrator || !CanNavigateAwayFromCurrentOrder()) return;
         await LoadDiningFloorAsync();
         ShowScreen(diningScreen);
     }
@@ -872,8 +872,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        CanNavigateAwayFromCurrentOrder();
+    }
+
+    private bool CanNavigateAwayFromCurrentOrder()
+    {
+        if (currentOrder is not { Type: OrderType.Takeaway, Status: OrderStatus.Open }) return true;
         StatusText.Text = string.Empty;
         new IncompleteTakeawayDialog { Owner = this }.ShowDialog();
+        return false;
     }
     private async void Pay_Click(object sender, RoutedEventArgs e)
     {
