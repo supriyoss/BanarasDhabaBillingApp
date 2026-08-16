@@ -31,8 +31,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.Grid diningScreen = new() { Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Grid floorPlanEditorScreen = new() { Visibility = Visibility.Collapsed };
     private InteractiveFloorPlanEditorView? floorPlanEditorView;
-    private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 190, DisplayMemberPath = "Name", Margin = new Thickness(4) };
-    private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.White, MinHeight = 520, MinWidth = 850 };
+    private readonly System.Windows.Controls.ComboBox diningLayoutSelector = new() { Width = 220, DisplayMemberPath = "Name", Margin = new Thickness(0, 5, 0, 0) };
+    private readonly System.Windows.Controls.Grid diningFloorGrid = new() { Background = Brushes.Transparent, MinHeight = 480, MinWidth = 900, Margin = new Thickness(12) };
+    private readonly System.Windows.Controls.TextBlock diningFloorNameText = new() { FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 32, 51)) };
+    private readonly System.Windows.Controls.TextBlock diningFloorDescriptionText = new() { Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 3, 0, 0) };
+    private readonly System.Windows.Controls.TextBlock diningTotalCountText = new() { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85)) };
+    private readonly System.Windows.Controls.TextBlock diningAvailableCountText = new() { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(21, 128, 61)) };
+    private readonly System.Windows.Controls.TextBlock diningOccupiedCountText = new() { FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(29, 78, 216)) };
     private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "DINE-IN" };
     private IReadOnlyList<FloorPlanView> diningLayouts = [];
     private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
@@ -186,19 +191,58 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (HomeNavButton.Parent is System.Windows.Controls.StackPanel nav) nav.Children.Insert(Math.Min(1, nav.Children.Count), diningNavButton);
         diningScreen.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
         diningScreen.RowDefinitions.Add(new System.Windows.Controls.RowDefinition());
-        var header = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 0, 0, 14) };
-        var title = new System.Windows.Controls.StackPanel();
-        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Dining floor plan", FontSize = 28, FontWeight = FontWeights.SemiBold });
-        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Select a table to start or reopen its order.", Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)) });
+        var headerCard = new System.Windows.Controls.Border { Style = (Style)FindResource("Card"), Padding = new Thickness(22, 18, 22, 18), Margin = new Thickness(0, 0, 0, 16) };
+        var header = new System.Windows.Controls.Grid();
+        header.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());
+        header.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+        var title = new System.Windows.Controls.StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "DINE-IN", FontSize = 11, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235)) });
+        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Dining floor", FontSize = 28, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 32, 51)), Margin = new Thickness(0, 2, 0, 0) });
+        title.Children.Add(new System.Windows.Controls.TextBlock { Text = "Choose an available table or reopen an occupied table's order.", Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 4, 0, 0) });
         header.Children.Add(title);
-        var refresh = new System.Windows.Controls.Button { Content = "Refresh" }; refresh.Click += async (_, _) => await LoadDiningFloorAsync();
-        System.Windows.Controls.DockPanel.SetDock(refresh, System.Windows.Controls.Dock.Right); header.Children.Add(refresh);
-        System.Windows.Controls.DockPanel.SetDock(diningLayoutSelector, System.Windows.Controls.Dock.Right); header.Children.Add(diningLayoutSelector);
-        diningScreen.Children.Add(header);
-        var scroll = new System.Windows.Controls.ScrollViewer { Content = diningFloorGrid, HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto };
-        System.Windows.Controls.Grid.SetRow(scroll, 1); diningScreen.Children.Add(scroll); host.Children.Add(diningScreen);
+        var floorSelector = new System.Windows.Controls.StackPanel { Margin = new Thickness(24, 0, 20, 0), VerticalAlignment = VerticalAlignment.Center };
+        floorSelector.Children.Add(new System.Windows.Controls.TextBlock { Text = "Floor", FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)) });
+        floorSelector.Children.Add(diningLayoutSelector);
+        System.Windows.Automation.AutomationProperties.SetName(diningLayoutSelector, "Dining floor selector");
+        System.Windows.Controls.Grid.SetColumn(floorSelector, 1); header.Children.Add(floorSelector);
+        var refresh = new System.Windows.Controls.Button { Content = "Refresh floor", Style = (Style)FindResource("PrimaryButton"), Padding = new Thickness(16, 10, 16, 10), VerticalAlignment = VerticalAlignment.Center };
+        System.Windows.Automation.AutomationProperties.SetName(refresh, "Refresh dining floor");
+        refresh.Click += async (_, _) => await LoadDiningFloorAsync();
+        System.Windows.Controls.Grid.SetColumn(refresh, 2); header.Children.Add(refresh);
+        headerCard.Child = header;
+        diningScreen.Children.Add(headerCard);
+
+        var floorCard = new System.Windows.Controls.Border { Style = (Style)FindResource("Card"), Padding = new Thickness(0), Background = Brushes.White };
+        var floorLayout = new System.Windows.Controls.Grid();
+        floorLayout.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+        floorLayout.RowDefinitions.Add(new System.Windows.Controls.RowDefinition());
+        var floorToolbar = new System.Windows.Controls.Grid { Margin = new Thickness(20, 16, 20, 14) };
+        floorToolbar.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());
+        floorToolbar.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+        var floorIdentity = new System.Windows.Controls.StackPanel();
+        floorIdentity.Children.Add(diningFloorNameText); floorIdentity.Children.Add(diningFloorDescriptionText); floorToolbar.Children.Add(floorIdentity);
+        var summary = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        summary.Children.Add(CreateDiningSummaryBadge(diningTotalCountText, new SolidColorBrush(Color.FromRgb(241, 245, 249))));
+        summary.Children.Add(CreateDiningSummaryBadge(diningAvailableCountText, new SolidColorBrush(Color.FromRgb(240, 253, 244))));
+        summary.Children.Add(CreateDiningSummaryBadge(diningOccupiedCountText, new SolidColorBrush(Color.FromRgb(239, 246, 255))));
+        System.Windows.Controls.Grid.SetColumn(summary, 1); floorToolbar.Children.Add(summary);
+        floorLayout.Children.Add(floorToolbar);
+        var scroll = new System.Windows.Controls.ScrollViewer { Content = diningFloorGrid, Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)), HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, Padding = new Thickness(4) };
+        System.Windows.Controls.Grid.SetRow(scroll, 1); floorLayout.Children.Add(scroll);
+        floorCard.Child = floorLayout;
+        System.Windows.Controls.Grid.SetRow(floorCard, 1); diningScreen.Children.Add(floorCard); host.Children.Add(diningScreen);
         diningLayoutSelector.SelectionChanged += (_, _) => RenderDiningFloor();
     }
+
+    private static System.Windows.Controls.Border CreateDiningSummaryBadge(System.Windows.Controls.TextBlock text, Brush background) => new()
+    {
+        Background = background,
+        CornerRadius = new CornerRadius(16),
+        Padding = new Thickness(12, 7, 12, 7),
+        Margin = new Thickness(6, 0, 0, 0),
+        Child = text
+    };
 
     private void BuildFloorPlanEditorScreen()
     {
@@ -428,14 +472,48 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void RenderDiningFloor()
     {
         diningFloorGrid.Children.Clear(); diningFloorGrid.RowDefinitions.Clear(); diningFloorGrid.ColumnDefinitions.Clear();
-        if (diningLayoutSelector.SelectedItem is not FloorPlanView layout) return;
+        if (diningLayoutSelector.SelectedItem is not FloorPlanView layout)
+        {
+            diningFloorNameText.Text = "No dining floor available";
+            diningFloorDescriptionText.Text = "Create a floor plan from Restaurant management to begin.";
+            diningTotalCountText.Text = "0 tables"; diningAvailableCountText.Text = "0 available"; diningOccupiedCountText.Text = "0 occupied";
+            return;
+        }
+        var occupiedCount = layout.Tables.Count(x => x.State == "Occupied");
+        var availableCount = layout.Tables.Count - occupiedCount;
+        diningFloorNameText.Text = layout.Name;
+        diningFloorDescriptionText.Text = $"{layout.Tables.Count} configured table{(layout.Tables.Count == 1 ? string.Empty : "s")} • Select a table to continue";
+        diningTotalCountText.Text = $"{layout.Tables.Count} total";
+        diningAvailableCountText.Text = $"{availableCount} available";
+        diningOccupiedCountText.Text = $"{occupiedCount} occupied";
         var columns = Math.Max(8, layout.Tables.Select(x => x.GridX + x.GridWidth).DefaultIfEmpty(8).Max());
         var rows = Math.Max(5, layout.Tables.Select(x => x.GridY + x.GridHeight).DefaultIfEmpty(5).Max());
-        for (var i = 0; i < columns; i++) diningFloorGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(125) });
-        for (var i = 0; i < rows; i++) diningFloorGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(105) });
+        for (var i = 0; i < columns; i++) diningFloorGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(165) });
+        for (var i = 0; i < rows; i++) diningFloorGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(145) });
         foreach (var table in layout.Tables)
         {
-            var button = new System.Windows.Controls.Button { Tag = table.Id, Margin = new Thickness(7), Background = table.State == "Occupied" ? new SolidColorBrush(Color.FromRgb(186, 230, 253)) : new SolidColorBrush(Color.FromRgb(241, 245, 249)), Content = new System.Windows.Controls.TextBlock { Text = table.State == "Available" ? $"{table.Name}\n{table.Capacity} seats\nAvailable" : $"{table.Name}\nOccupied\n{table.RunningTotal:N2}", TextAlignment = TextAlignment.Center } };
+            var isOccupied = table.State == "Occupied";
+            var content = new System.Windows.Controls.Grid();
+            content.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            content.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            content.RowDefinitions.Add(new System.Windows.Controls.RowDefinition());
+            content.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            var name = new System.Windows.Controls.TextBlock { Text = table.Name, FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 32, 51)), TextWrapping = TextWrapping.Wrap };
+            content.Children.Add(name);
+            var statePill = new System.Windows.Controls.Border { Background = new SolidColorBrush(isOccupied ? Color.FromRgb(219, 234, 254) : Color.FromRgb(220, 252, 231)), CornerRadius = new CornerRadius(10), Padding = new Thickness(7, 3, 7, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+            statePill.Child = new System.Windows.Controls.TextBlock { Text = isOccupied ? "OCCUPIED" : "AVAILABLE", FontSize = 9, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(isOccupied ? Color.FromRgb(29, 78, 216) : Color.FromRgb(21, 128, 61)) };
+            System.Windows.Controls.Grid.SetRow(statePill, 1); content.Children.Add(statePill);
+            var details = new System.Windows.Controls.StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            details.Children.Add(new System.Windows.Controls.TextBlock { Text = $"{table.Capacity} seats", Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)) });
+            if (!string.IsNullOrWhiteSpace(table.Section)) details.Children.Add(new System.Windows.Controls.TextBlock { Text = table.Section, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+            System.Windows.Controls.Grid.SetRow(details, 2); content.Children.Add(details);
+            if (isOccupied)
+            {
+                var runningTotal = new System.Windows.Controls.TextBlock { Text = $"Running total  {table.RunningTotal:N2}", FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(29, 78, 216)), Margin = new Thickness(0, 6, 0, 0) };
+                System.Windows.Controls.Grid.SetRow(runningTotal, 3); content.Children.Add(runningTotal);
+            }
+            var button = new System.Windows.Controls.Button { Tag = table.Id, Margin = new Thickness(7), Style = (Style)FindResource("DiningTableButton"), Background = isOccupied ? new SolidColorBrush(Color.FromRgb(248, 251, 255)) : Brushes.White, BorderBrush = new SolidColorBrush(isOccupied ? Color.FromRgb(147, 197, 253) : Color.FromRgb(220, 228, 239)), Content = content, ToolTip = isOccupied ? $"Open the running order for {table.Name}" : $"Start a new order for {table.Name}" };
+            System.Windows.Automation.AutomationProperties.SetName(button, isOccupied ? $"{table.Name}, occupied, running total {table.RunningTotal:N2}" : $"{table.Name}, available, {table.Capacity} seats");
             button.Click += async (_, _) => await OpenTableOrderAsync((int)button.Tag);
             System.Windows.Controls.Grid.SetColumn(button, table.GridX); System.Windows.Controls.Grid.SetRow(button, table.GridY); System.Windows.Controls.Grid.SetColumnSpan(button, table.GridWidth); System.Windows.Controls.Grid.SetRowSpan(button, table.GridHeight); diningFloorGrid.Children.Add(button);
         }
@@ -809,7 +887,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var printMessage = await PrintReceiptAsync(paidOrder, false);
         lastPaidOrder = paidOrder;
         LastReceiptText.Text = $"{paidOrder.InvoiceNumber} • {paidOrder.GrandTotal:N2}";
-        LastReceiptPanel.Visibility = Visibility.Visible;
         currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; invoicePrintedForCurrentOrder = false;
         RefreshOrder(string.Empty); ShowScreen(HomeScreen);
         HomeStaffText.Text = $"{printMessage} Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
