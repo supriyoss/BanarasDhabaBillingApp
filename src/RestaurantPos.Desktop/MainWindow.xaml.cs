@@ -872,7 +872,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        StatusText.Text = "Use Save open takeaway or Pay / Complete before leaving this order.";
+        StatusText.Text = string.Empty;
+        new IncompleteTakeawayDialog { Owner = this }.ShowDialog();
     }
     private async void Pay_Click(object sender, RoutedEventArgs e)
     {
