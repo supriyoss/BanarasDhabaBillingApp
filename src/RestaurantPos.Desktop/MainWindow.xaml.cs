@@ -46,6 +46,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Send KOT", Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Button saveReopenedTakeawayButton = new() { Content = "Save changes", Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Button updateServerNameButton = new() { Content = "Update server", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.ComboBox receiptPrinterSelector = new() { MinWidth = 250, Height = 38 };
+    private readonly System.Windows.Controls.ComboBox kitchenPrinterSelector = new() { MinWidth = 250, Height = 38 };
+    private readonly System.Windows.Controls.CheckBox useSamePrinterForKitchen = new() { Content = "Use receipt printer for KOTs", Margin = new Thickness(0, 10, 0, 8), IsChecked = true };
+    private readonly System.Windows.Controls.TextBlock printerConfigurationStatus = new() { Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
     private FrameworkElement? serverNameEditorRow;
     private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
     private readonly System.Windows.Controls.ComboBox editMenuCategorySelector = new() { MinWidth = 165, DisplayMemberPath = "Name", Margin = new Thickness(4) };
@@ -56,6 +60,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private DiscountType selectedDiscountType = DiscountType.Percentage;
     private PaymentMethod selectedPaymentMethod = PaymentMethod.Cash;
     private ReceiptPaperWidth configuredReceiptPaperWidth = ReceiptPaperWidth.Mm80;
+    private string? configuredReceiptPrinterName;
+    private string? configuredKitchenPrinterName;
+    private bool configuredUseSamePrinterForKitchen = true;
     private SalesReportPeriod selectedReportPeriod = SalesReportPeriod.Daily;
     private bool invoicePrintedForCurrentOrder;
     private bool isReopenedTakeaway;
@@ -92,6 +99,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ConfigureMenuEditor();
         ConfigureApplicationAccountManagement();
         ConfigureServerNameEditor();
+        ConfigurePrinterSettings();
         CartGrid.SelectionChanged += (_, _) => UpdatePreparationAction();
         menuCategoryFilter.SelectionChanged += (_, _) => ApplyMenuFilter();
         if (MenuSearchInput.Parent is System.Windows.Controls.Panel menuHeader)
@@ -147,6 +155,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         TableSelector.ItemsSource = await db.DiningTables.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
         var restaurantSettings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1);
         configuredReceiptPaperWidth = restaurantSettings.ReceiptPaperWidthMm == 58 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
+        configuredReceiptPrinterName = NullIfEmpty(restaurantSettings.ReceiptPrinterName);
+        configuredKitchenPrinterName = NullIfEmpty(restaurantSettings.KitchenPrinterName);
+        configuredUseSamePrinterForKitchen = restaurantSettings.UseSamePrinterForKitchen;
         ReceiptPaperSelector.SelectedIndex = configuredReceiptPaperWidth == ReceiptPaperWidth.Mm58 ? 0 : 1;
         SelectDiscountType(DiscountType.Percentage);
         SelectPaymentMethod(PaymentMethod.Cash);
@@ -429,6 +440,65 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         orderDetails.Children.Insert(orderDetails.Children.IndexOf(OrderInfoText), serverRow);
     }
 
+    private void ConfigurePrinterSettings()
+    {
+        if (ReceiptPaperSelector.Parent is not DependencyObject paperControlRow
+            || LogicalTreeHelper.GetParent(paperControlRow) is not System.Windows.Controls.StackPanel paperContent
+            || LogicalTreeHelper.GetParent(paperContent) is not System.Windows.Controls.Border paperCard
+            || paperCard.Parent is not System.Windows.Controls.Grid settingsGrid) return;
+
+        settingsGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+        foreach (var child in settingsGrid.Children.OfType<FrameworkElement>().Where(child => System.Windows.Controls.Grid.GetColumn(child) == 1))
+            System.Windows.Controls.Grid.SetRowSpan(child, Math.Max(3, System.Windows.Controls.Grid.GetRowSpan(child)));
+
+        System.Windows.Automation.AutomationProperties.SetName(receiptPrinterSelector, "Receipt printer");
+        System.Windows.Automation.AutomationProperties.SetName(kitchenPrinterSelector, "KOT printer");
+        receiptPrinterSelector.SelectionChanged += (_, _) => { if (useSamePrinterForKitchen.IsChecked == true) kitchenPrinterSelector.SelectedItem = receiptPrinterSelector.SelectedItem; };
+        useSamePrinterForKitchen.Checked += SamePrinterSettingChanged;
+        useSamePrinterForKitchen.Unchecked += SamePrinterSettingChanged;
+
+        var receiptTestButton = new System.Windows.Controls.Button { Content = "Test receipt printer", Margin = new Thickness(0, 8, 0, 0) };
+        receiptTestButton.Click += TestReceiptPrinter_Click;
+        var kitchenTestButton = new System.Windows.Controls.Button { Content = "Test KOT printer", Margin = new Thickness(0, 8, 0, 0) };
+        kitchenTestButton.Click += TestKitchenPrinter_Click;
+        var saveButton = new System.Windows.Controls.Button { Content = "Save printer settings", Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
+        saveButton.Style = (Style)FindResource("PrimaryButton");
+        saveButton.Click += SavePrinterSettings_Click;
+
+        var content = new System.Windows.Controls.StackPanel();
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Printer routing", FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(23, 32, 51)) });
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Select where invoices and kitchen tickets print. Saved printers print directly without the Windows dialog.", Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 10) });
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "Receipt printer", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 5) });
+        content.Children.Add(receiptPrinterSelector);
+        content.Children.Add(receiptTestButton);
+        content.Children.Add(useSamePrinterForKitchen);
+        content.Children.Add(new System.Windows.Controls.TextBlock { Text = "KOT printer", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 5) });
+        content.Children.Add(kitchenPrinterSelector);
+        content.Children.Add(kitchenTestButton);
+        content.Children.Add(saveButton);
+        content.Children.Add(printerConfigurationStatus);
+
+        var card = new System.Windows.Controls.Border
+        {
+            Style = (Style)FindResource("Card"),
+            Background = Brushes.White,
+            Padding = new Thickness(16),
+            Margin = new Thickness(0, 10, 10, 0),
+            Child = content
+        };
+        System.Windows.Controls.Grid.SetRow(card, 2);
+        settingsGrid.Children.Add(card);
+        UpdateKitchenPrinterControls();
+    }
+
+    private void SamePrinterSettingChanged(object sender, RoutedEventArgs e) => UpdateKitchenPrinterControls();
+    private void UpdateKitchenPrinterControls()
+    {
+        var usesSamePrinter = useSamePrinterForKitchen.IsChecked == true;
+        kitchenPrinterSelector.IsEnabled = !usesSamePrinter;
+        if (usesSamePrinter) kitchenPrinterSelector.SelectedItem = receiptPrinterSelector.SelectedItem;
+    }
+
     private async Task LoadApplicationAccountsAsync()
     {
         if (!IsAdministrator) return;
@@ -679,6 +749,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             configuredReceiptPaperWidth = settings.ReceiptPaperWidthMm == 58 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
             ReceiptPaperSelector.SelectedIndex = configuredReceiptPaperWidth == ReceiptPaperWidth.Mm58 ? 0 : 1;
             ReceiptPaperStatusText.Text = $"Saved setting: {(int)configuredReceiptPaperWidth} mm";
+            LoadPrinterConfiguration(scope.ServiceProvider.GetRequiredService<IPhysicalPrinterService>(), settings);
             if (managementCategorySelector.SelectedIndex < 0) managementCategorySelector.SelectedIndex = 0;
             await LoadHistoryAsync(admin);
         }
@@ -804,6 +875,73 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             AdminStatusText.Text = "Physical receipt paper setting updated.";
         }
         catch (Exception ex) { ReceiptPaperStatusText.Text = ex.Message; }
+    }
+    private void LoadPrinterConfiguration(IPhysicalPrinterService printerService, RestaurantSettings settings)
+    {
+        try
+        {
+            var installedPrinters = printerService.GetInstalledPrinterNames();
+            var choices = installedPrinters
+                .Concat(new[] { settings.ReceiptPrinterName, settings.KitchenPrinterName }.Where(name => !string.IsNullOrWhiteSpace(name)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+            receiptPrinterSelector.ItemsSource = choices;
+            kitchenPrinterSelector.ItemsSource = choices;
+            receiptPrinterSelector.SelectedItem = choices.FirstOrDefault(name => string.Equals(name, settings.ReceiptPrinterName, StringComparison.OrdinalIgnoreCase));
+            kitchenPrinterSelector.SelectedItem = choices.FirstOrDefault(name => string.Equals(name, settings.KitchenPrinterName, StringComparison.OrdinalIgnoreCase));
+            useSamePrinterForKitchen.IsChecked = settings.UseSamePrinterForKitchen;
+            UpdateKitchenPrinterControls();
+
+            configuredReceiptPrinterName = NullIfEmpty(settings.ReceiptPrinterName);
+            configuredKitchenPrinterName = NullIfEmpty(settings.KitchenPrinterName);
+            configuredUseSamePrinterForKitchen = settings.UseSamePrinterForKitchen;
+            var missing = new[] { configuredReceiptPrinterName, ConfiguredKitchenPrinterName }
+                .Where(name => name is not null && !installedPrinters.Contains(name, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            printerConfigurationStatus.Text = installedPrinters.Count == 0
+                ? "No installed Windows printers were found. Install the printer driver, then reopen this page."
+                : configuredReceiptPrinterName is null
+                    ? "Printers are not configured yet. Until saved, Windows asks for a printer when printing."
+                    : missing.Count > 0
+                        ? $"Saved printer unavailable: {string.Join(", ", missing)}"
+                        : "Direct printing is configured.";
+        }
+        catch (Exception ex) { printerConfigurationStatus.Text = $"Unable to load Windows printers: {ex.Message}"; }
+    }
+    private async void SavePrinterSettings_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var receiptPrinter = receiptPrinterSelector.SelectedItem as string ?? string.Empty;
+            var useSamePrinter = useSamePrinterForKitchen.IsChecked == true;
+            var kitchenPrinter = useSamePrinter ? receiptPrinter : kitchenPrinterSelector.SelectedItem as string ?? string.Empty;
+            using var scope = scopeFactory.CreateScope();
+            var admin = scope.ServiceProvider.GetRequiredService<IAdministrationService>();
+            await admin.UpdatePrinterConfigurationAsync(receiptPrinter, kitchenPrinter, useSamePrinter, session.CurrentUser!.Id);
+            configuredReceiptPrinterName = receiptPrinter;
+            configuredKitchenPrinterName = kitchenPrinter;
+            configuredUseSamePrinterForKitchen = useSamePrinter;
+            printerConfigurationStatus.Text = "Printer settings saved. Receipts and KOTs will now print directly.";
+            AdminStatusText.Text = "Printer routing updated.";
+        }
+        catch (Exception ex) { printerConfigurationStatus.Text = ex.Message; }
+    }
+    private async void TestReceiptPrinter_Click(object sender, RoutedEventArgs e) => await PrintTestPageAsync(receiptPrinterSelector.SelectedItem as string, "Receipt");
+    private async void TestKitchenPrinter_Click(object sender, RoutedEventArgs e)
+    {
+        var printer = useSamePrinterForKitchen.IsChecked == true ? receiptPrinterSelector.SelectedItem as string : kitchenPrinterSelector.SelectedItem as string;
+        await PrintTestPageAsync(printer, "KOT");
+    }
+    private async Task PrintTestPageAsync(string? printerName, string destination)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(printerName)) throw new InvalidOperationException($"Select a {destination.ToLowerInvariant()} printer first.");
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IPhysicalPrinterService>().PrintTestPageAsync(printerName, SelectedReceiptPaperWidth, destination);
+            printerConfigurationStatus.Text = $"{destination} test page sent to {printerName}.";
+        }
+        catch (Exception ex) { printerConfigurationStatus.Text = ex.Message; }
     }
     private async void LoadHistory_Click(object sender, RoutedEventArgs e)
     {
@@ -973,7 +1111,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             : await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id);
         if (ticket is null || ticket.PrintCount > 0) return (null, false);
         latestKitchenOrderTicket = ticket;
-        var printed = await services.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(ticket, SelectedReceiptPaperWidth);
+        var printed = await services.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(ticket, SelectedReceiptPaperWidth, ConfiguredKitchenPrinterName);
         if (printed) await workflow.RecordKitchenOrderTicketPrintAsync(ticket.Id, session.CurrentUser.Id);
         return (ticket, printed);
     }
@@ -986,7 +1124,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>();
             latestKitchenOrderTicket ??= await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser!.Id);
             if (latestKitchenOrderTicket is null) { StatusText.Text = "Send the first KOT before reprinting."; return; }
-            var printed = await scope.ServiceProvider.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(latestKitchenOrderTicket, SelectedReceiptPaperWidth);
+            var printed = await scope.ServiceProvider.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(latestKitchenOrderTicket, SelectedReceiptPaperWidth, ConfiguredKitchenPrinterName);
             if (printed) await workflow.RecordKitchenOrderTicketPrintAsync(latestKitchenOrderTicket.Id, session.CurrentUser!.Id);
             StatusText.Text = printed ? $"{latestKitchenOrderTicket.TicketNumber} reprinted." : "KOT reprint cancelled.";
         }
@@ -1044,12 +1182,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     private async void Reprint_Click(object sender, RoutedEventArgs e) { if (currentOrder is not null) await PrintReceiptAsync(currentOrder, true); }
     private ReceiptPaperWidth SelectedReceiptPaperWidth => configuredReceiptPaperWidth;
+    private string? ConfiguredKitchenPrinterName => configuredUseSamePrinterForKitchen ? configuredReceiptPrinterName : configuredKitchenPrinterName;
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private async Task<string> PrintReceiptAsync(Order order, bool isReprint)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(order, isReprint, SelectedReceiptPaperWidth);
+            var printed = await scope.ServiceProvider.GetRequiredService<IReceiptPrinter>().PrintAsync(order, isReprint, SelectedReceiptPaperWidth, configuredReceiptPrinterName);
             if (!printed) { StatusText.Text = "Payment completed; printing was cancelled."; return "Payment completed; printing was cancelled."; }
             invoicePrintedForCurrentOrder = true;
             ReprintButton.Visibility = Visibility.Visible;

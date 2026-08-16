@@ -48,6 +48,6 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
             e.HasOne(x => x.KitchenOrderTicket).WithMany(x => x.Lines).HasForeignKey(x => x.KitchenOrderTicketId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<AuditEntry>(e => { e.Property(x => x.EntityType).HasMaxLength(80).IsRequired(); e.Property(x => x.EntityId).HasMaxLength(80).IsRequired(); e.Property(x => x.Detail).HasMaxLength(500).IsRequired(); e.HasIndex(x => new { x.EntityType, x.EntityId }); e.HasIndex(x => x.OccurredUtc); });
-        b.Entity<RestaurantSettings>(e => e.Property(x => x.GstRate).HasPrecision(5, 2));
+        b.Entity<RestaurantSettings>(e => { e.Property(x => x.GstRate).HasPrecision(5, 2); e.Property(x => x.ReceiptPrinterName).HasMaxLength(260); e.Property(x => x.KitchenPrinterName).HasMaxLength(260); });
     }
 }

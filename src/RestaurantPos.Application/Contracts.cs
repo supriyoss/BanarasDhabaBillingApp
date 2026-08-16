@@ -6,13 +6,19 @@ public enum ReceiptPaperWidth { Mm58 = 58, Mm80 = 80 }
 
 public interface IReceiptPrinter
 {
-    Task<bool> PrintAsync(Order order, bool isReprint, ReceiptPaperWidth paperWidth, CancellationToken cancellationToken = default);
+    Task<bool> PrintAsync(Order order, bool isReprint, ReceiptPaperWidth paperWidth, string? printerName = null, CancellationToken cancellationToken = default);
     Task ExportPdfAsync(Order order, bool isReprint, string filePath, ReceiptPaperWidth paperWidth = ReceiptPaperWidth.Mm80, CancellationToken cancellationToken = default);
 }
 
 public interface IKitchenOrderTicketPrinter
 {
-    Task<bool> PrintAsync(KitchenOrderTicket ticket, ReceiptPaperWidth paperWidth, CancellationToken cancellationToken = default);
+    Task<bool> PrintAsync(KitchenOrderTicket ticket, ReceiptPaperWidth paperWidth, string? printerName = null, CancellationToken cancellationToken = default);
+}
+
+public interface IPhysicalPrinterService
+{
+    IReadOnlyList<string> GetInstalledPrinterNames();
+    Task PrintTestPageAsync(string printerName, ReceiptPaperWidth paperWidth, string destination, CancellationToken cancellationToken = default);
 }
 
 public interface IBackupService

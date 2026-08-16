@@ -61,6 +61,41 @@ public sealed class RoleAccountTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.UpdateReceiptPaperWidthAsync((ReceiptPaperWidth)70, fixture.ActorId));
     }
 
+    [Fact]
+    public async Task Manager_CanConfigureSeparateReceiptAndKotPrinters()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Manager);
+
+        await fixture.Service.UpdatePrinterConfigurationAsync("Front Receipt", "Kitchen KOT", false, fixture.ActorId);
+
+        var settings = await fixture.Service.GetSettingsAsync();
+        Assert.Equal("Front Receipt", settings.ReceiptPrinterName);
+        Assert.Equal("Kitchen KOT", settings.KitchenPrinterName);
+        Assert.False(settings.UseSamePrinterForKitchen);
+    }
+
+    [Fact]
+    public async Task SamePrinterConfiguration_RoutesKotToReceiptPrinter()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Manager);
+
+        await fixture.Service.UpdatePrinterConfigurationAsync("Thermal Printer", string.Empty, true, fixture.ActorId);
+
+        var settings = await fixture.Service.GetSettingsAsync();
+        Assert.Equal("Thermal Printer", settings.ReceiptPrinterName);
+        Assert.Equal("Thermal Printer", settings.KitchenPrinterName);
+        Assert.True(settings.UseSamePrinterForKitchen);
+    }
+
+    [Fact]
+    public async Task PrinterConfiguration_RequiresEverySelectedDestination()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Manager);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.UpdatePrinterConfigurationAsync(string.Empty, "Kitchen", false, fixture.ActorId));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.UpdatePrinterConfigurationAsync("Receipt", string.Empty, false, fixture.ActorId));
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

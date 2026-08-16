@@ -112,6 +112,22 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
         db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "RestaurantSettings", EntityId = "ReceiptPaper", Detail = $"Updated physical receipt paper width to {(int)paperWidth} mm." });
         await db.SaveChangesAsync(cancellationToken);
     }
+    public async Task UpdatePrinterConfigurationAsync(string receiptPrinterName, string kitchenPrinterName, bool useSamePrinter, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
+        receiptPrinterName = receiptPrinterName.Trim();
+        kitchenPrinterName = kitchenPrinterName.Trim();
+        if (string.IsNullOrWhiteSpace(receiptPrinterName)) throw new InvalidOperationException("Select a receipt printer.");
+        if (!useSamePrinter && string.IsNullOrWhiteSpace(kitchenPrinterName)) throw new InvalidOperationException("Select a KOT printer.");
+        if (receiptPrinterName.Length > 260 || kitchenPrinterName.Length > 260) throw new InvalidOperationException("The selected printer name is too long.");
+        var settings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
+        settings.ReceiptPrinterName = receiptPrinterName;
+        settings.KitchenPrinterName = useSamePrinter ? receiptPrinterName : kitchenPrinterName;
+        settings.UseSamePrinterForKitchen = useSamePrinter;
+        settings.UpdatedUtc = DateTime.UtcNow;
+        db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "RestaurantSettings", EntityId = "Printers", Detail = useSamePrinter ? "Configured one printer for receipts and KOTs." : "Configured separate receipt and KOT printers." });
+        await db.SaveChangesAsync(cancellationToken);
+    }
     public async Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default)
     {
         var start = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Local).ToUniversalTime();

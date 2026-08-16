@@ -91,6 +91,9 @@ public sealed class RestaurantSettings
     public int Id { get; set; }
     public decimal GstRate { get; set; } = 5m;
     public int ReceiptPaperWidthMm { get; set; } = 80;
+    public string ReceiptPrinterName { get; set; } = string.Empty;
+    public string KitchenPrinterName { get; set; } = string.Empty;
+    public bool UseSamePrinterForKitchen { get; set; } = true;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 

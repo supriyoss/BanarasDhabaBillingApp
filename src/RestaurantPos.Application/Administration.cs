@@ -17,6 +17,7 @@ public interface IAdministrationService
     Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default);
     Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default);
     Task UpdateReceiptPaperWidthAsync(ReceiptPaperWidth paperWidth, int performedByUserId, CancellationToken cancellationToken = default);
+    Task UpdatePrinterConfigurationAsync(string receiptPrinterName, string kitchenPrinterName, bool useSamePrinter, int performedByUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default);
 }
 

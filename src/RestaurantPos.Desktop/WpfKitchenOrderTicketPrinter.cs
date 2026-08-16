@@ -1,4 +1,3 @@
-using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -10,19 +9,18 @@ namespace RestaurantPos.Desktop;
 
 public sealed class WpfKitchenOrderTicketPrinter : IKitchenOrderTicketPrinter
 {
-    public Task<bool> PrintAsync(KitchenOrderTicket ticket, ReceiptPaperWidth paperWidth, CancellationToken cancellationToken = default)
+    public Task<bool> PrintAsync(KitchenOrderTicket ticket, ReceiptPaperWidth paperWidth, string? printerName = null, CancellationToken cancellationToken = default)
     {
         var printed = false;
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
-            var dialog = new PrintDialog();
-            if (dialog.ShowDialog() != true) return;
-
-            var requestedWidth = WpfReceiptPrinter.GetPaperWidth(paperWidth);
-            TrySetPrinterPaperWidth(dialog, requestedWidth);
-            var document = BuildDocument(ticket, Math.Min(dialog.PrintableAreaWidth > 0 ? dialog.PrintableAreaWidth : requestedWidth, requestedWidth), dialog.PrintableAreaHeight);
-            dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, ticket.TicketNumber);
-            printed = true;
+            printed = WpfPrintSupport.Print(printerName, dialog =>
+            {
+                var requestedWidth = WpfReceiptPrinter.GetPaperWidth(paperWidth);
+                WpfPrintSupport.TrySetPaperWidth(dialog, requestedWidth);
+                var document = BuildDocument(ticket, Math.Min(dialog.PrintableAreaWidth > 0 ? dialog.PrintableAreaWidth : requestedWidth, requestedWidth), WpfPrintSupport.GetPrintableHeight(dialog));
+                dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, ticket.TicketNumber);
+            });
         });
         return Task.FromResult(printed);
     }
@@ -64,22 +62,6 @@ public sealed class WpfKitchenOrderTicketPrinter : IKitchenOrderTicketPrinter
     {
         var table = order.DiningTable?.Name ?? "Table not specified";
         return order.DiningTable?.FloorLayout is null ? table : $"{order.DiningTable.FloorLayout.Name} • {table}";
-    }
-
-    private static void TrySetPrinterPaperWidth(PrintDialog dialog, double width)
-    {
-        try
-        {
-            var ticket = dialog.PrintTicket;
-            var height = ticket.PageMediaSize?.Height ?? dialog.PrintableAreaHeight;
-            if (height > 0) ticket.PageMediaSize = new PageMediaSize(width, height);
-            ticket.PageOrientation = PageOrientation.Portrait;
-            dialog.PrintTicket = ticket;
-        }
-        catch (PrintSystemException)
-        {
-            // Some thermal drivers reject custom media. The document still uses the configured roll width.
-        }
     }
 
     private static Paragraph Paragraph(string text, TextAlignment alignment = TextAlignment.Left, FontWeight? weight = null, double fontSize = 10, Thickness? margin = null) => new(new Run(text))
