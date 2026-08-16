@@ -3,7 +3,7 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="Banaras Dhaba POS"
            Manufacturer="Banaras Dhaba"
-           Version="3.8.0"
+           Version="3.8.1"
            UpgradeCode="{C2E1C6F0-50E9-43DC-95E5-03B7B43574B7}"
            Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer version of Banaras Dhaba POS is already installed." />
