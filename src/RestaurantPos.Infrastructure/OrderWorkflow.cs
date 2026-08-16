@@ -148,6 +148,80 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         await db.SaveChangesAsync(cancellationToken); return order;
     }
 
+    public async Task<KitchenOrderTicket> CreateKitchenOrderTicketAsync(int orderId, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var order = await LoadOpenAsync(orderId, cancellationToken);
+        if (order.Lines.Count == 0) throw new InvalidOperationException("Add at least one item before sending a KOT.");
+
+        var previousTickets = await db.KitchenOrderTickets.Include(x => x.Lines)
+            .Where(x => x.OrderId == orderId).OrderBy(x => x.SequenceNumber).ToListAsync(cancellationToken);
+        var sentQuantities = previousTickets.SelectMany(x => x.Lines)
+            .GroupBy(x => x.SourceOrderLineId).ToDictionary(x => x.Key, x => x.Sum(line => line.Quantity));
+        var pendingLines = order.Lines.Select(line => new
+            {
+                Line = line,
+                Quantity = line.Quantity - sentQuantities.GetValueOrDefault(line.Id)
+            })
+            .Where(x => x.Quantity > 0)
+            .ToList();
+        if (pendingLines.Count == 0) throw new InvalidOperationException("There are no new or increased items to send to the kitchen.");
+
+        var sequence = previousTickets.Count + 1;
+        var orderNumber = order.InvoiceNumber.StartsWith("POS-", StringComparison.OrdinalIgnoreCase) ? order.InvoiceNumber[4..] : order.InvoiceNumber;
+        var ticket = new KitchenOrderTicket
+        {
+            OrderId = order.Id,
+            TicketNumber = $"KOT-{orderNumber}-{sequence:00}",
+            SequenceNumber = sequence,
+            IsSupplementary = sequence > 1,
+            CreatedByUserId = userId,
+            Lines = pendingLines.Select(x => new KitchenOrderTicketLine
+            {
+                SourceOrderLineId = x.Line.Id,
+                ItemName = x.Line.ItemName,
+                Quantity = x.Quantity,
+                PreparationMode = x.Line.PreparationMode
+            }).ToList()
+        };
+        db.KitchenOrderTickets.Add(ticket);
+        AddAudit(userId, AuditAction.KitchenTicketCreated, "KitchenOrderTicket", ticket.TicketNumber,
+            ticket.IsSupplementary ? $"Created supplementary KOT for {order.InvoiceNumber}." : $"Created KOT for {order.InvoiceNumber}.");
+        await db.SaveChangesAsync(cancellationToken);
+        return await LoadKitchenOrderTicketAsync(ticket.Id, cancellationToken);
+    }
+
+    public async Task<KitchenOrderTicket?> GetLatestKitchenOrderTicketAsync(int orderId, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        return await db.KitchenOrderTickets.Include(x => x.Lines)
+            .Include(x => x.Order).ThenInclude(x => x!.DiningTable).ThenInclude(x => x!.FloorLayout)
+            .Where(x => x.OrderId == orderId).OrderByDescending(x => x.SequenceNumber).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasPendingKitchenOrderTicketItemsAsync(int orderId, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var order = await LoadOpenAsync(orderId, cancellationToken);
+        var sentLines = await db.KitchenOrderTicketLines.Where(x => x.KitchenOrderTicket!.OrderId == orderId)
+            .Select(x => new { x.SourceOrderLineId, x.Quantity }).ToListAsync(cancellationToken);
+        var sentQuantities = sentLines.GroupBy(x => x.SourceOrderLineId)
+            .ToDictionary(x => x.Key, x => x.Sum(line => line.Quantity));
+        return order.Lines.Any(line => line.Quantity > sentQuantities.GetValueOrDefault(line.Id));
+    }
+
+    public async Task RecordKitchenOrderTicketPrintAsync(int ticketId, int userId, CancellationToken cancellationToken = default)
+    {
+        await EnsureOperationalUserAsync(userId, cancellationToken);
+        var ticket = await db.KitchenOrderTickets.SingleOrDefaultAsync(x => x.Id == ticketId, cancellationToken)
+            ?? throw new InvalidOperationException("The KOT was not found.");
+        ticket.PrintCount++;
+        ticket.LastPrintedUtc = DateTime.UtcNow;
+        AddAudit(userId, AuditAction.KitchenTicketPrinted, "KitchenOrderTicket", ticket.TicketNumber,
+            ticket.PrintCount == 1 ? "Printed KOT." : $"Reprinted KOT (print {ticket.PrintCount}).");
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task CancelAsync(int orderId, int userId, CancellationToken cancellationToken = default)
     {
         await EnsureOperationalUserAsync(userId, cancellationToken); var order = await LoadAsync(orderId, cancellationToken);
@@ -181,6 +255,7 @@ public sealed class OrderWorkflow(RestaurantDbContext db, IOrderCalculator calcu
         return user;
     }
     private Task<Order> LoadAsync(int orderId, CancellationToken ct) => db.Orders.Include(x => x.DiningTable).ThenInclude(x => x!.FloorLayout).Include(x => x.Lines).Include(x => x.Payments).SingleAsync(x => x.Id == orderId, ct);
+    private Task<KitchenOrderTicket> LoadKitchenOrderTicketAsync(int ticketId, CancellationToken ct) => db.KitchenOrderTickets.Include(x => x.Lines).Include(x => x.Order).ThenInclude(x => x!.DiningTable).ThenInclude(x => x!.FloorLayout).SingleAsync(x => x.Id == ticketId, ct);
     private void Recalculate(Order order) { var totals = calculator.Calculate(order); order.DiscountAmount = totals.Discount; order.TaxAmount = totals.Tax; order.GrandTotal = totals.Total; }
     private void AddAudit(int userId, AuditAction action, string type, string id, string detail) => db.AuditEntries.Add(new AuditEntry { UserId = userId, Action = action, EntityType = type, EntityId = id, Detail = detail });
 }

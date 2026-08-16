@@ -246,6 +246,78 @@ public sealed class OrderWorkflowTests
         Assert.Empty(await fixture.Workflow.GetOpenTakeawayOrdersAsync());
     }
 
+    [Fact]
+    public async Task FirstKot_CapturesCompletePriceFreeKitchenSnapshot()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Amit");
+        order = await fixture.Workflow.AddMenuItemAsync(order.Id, fixture.MenuItemId, fixture.UserId);
+
+        var kot = await fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId);
+
+        Assert.Equal(1, kot.SequenceNumber);
+        Assert.False(kot.IsSupplementary);
+        Assert.StartsWith("KOT-", kot.TicketNumber);
+        Assert.Equal(2m, kot.Lines.Single().Quantity);
+        Assert.Equal("Meal", kot.Lines.Single().ItemName);
+        Assert.Equal(PreparationMode.DineIn, kot.Lines.Single().PreparationMode);
+    }
+
+    [Fact]
+    public async Task SupplementaryKot_ContainsOnlyQuantityAddedSinceEarlierTickets()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.Takeaway, null, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId, "Staff");
+        Assert.True(await fixture.Workflow.HasPendingKitchenOrderTicketItemsAsync(order.Id, fixture.UserId));
+        var first = await fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId);
+        Assert.False(await fixture.Workflow.HasPendingKitchenOrderTicketItemsAsync(order.Id, fixture.UserId));
+        order = await fixture.Workflow.AddMenuItemAsync(order.Id, fixture.MenuItemId, fixture.UserId);
+        Assert.True(await fixture.Workflow.HasPendingKitchenOrderTicketItemsAsync(order.Id, fixture.UserId));
+
+        var supplementary = await fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId);
+
+        Assert.Equal(2, supplementary.SequenceNumber);
+        Assert.True(supplementary.IsSupplementary);
+        Assert.Equal(1m, supplementary.Lines.Single().Quantity);
+        Assert.NotEqual(first.TicketNumber, supplementary.TicketNumber);
+        Assert.False(await fixture.Workflow.HasPendingKitchenOrderTicketItemsAsync(order.Id, fixture.UserId));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId));
+        Assert.Contains("no new or increased items", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LatestKot_CanBeRetrievedAndSuccessfulPrintsAreAudited()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.DineIn, fixture.TableId, fixture.MenuItemId, PreparationMode.DineIn, fixture.UserId, "Staff");
+        var ticket = await fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId);
+
+        await fixture.Workflow.RecordKitchenOrderTicketPrintAsync(ticket.Id, fixture.UserId);
+        var latest = await fixture.Workflow.GetLatestKitchenOrderTicketAsync(order.Id, fixture.UserId);
+
+        Assert.NotNull(latest);
+        Assert.Equal(ticket.Id, latest.Id);
+        Assert.Equal(1, latest.PrintCount);
+        Assert.NotNull(latest.LastPrintedUtc);
+        Assert.Contains(await fixture.Db.AuditEntries.ToListAsync(), x => x.Action == AuditAction.KitchenTicketPrinted && x.EntityId == ticket.TicketNumber);
+    }
+
+    [Fact]
+    public async Task TakeawayKot_RemainsAvailableAfterOrderMovesToOpenTakeawaysAndReopens()
+    {
+        await using var fixture = await WorkflowFixture.CreateAsync();
+        var order = await fixture.Workflow.StartWithMenuItemAsync(OrderType.Takeaway, null, fixture.MenuItemId, PreparationMode.Packed, fixture.UserId, "Staff");
+        var ticket = await fixture.Workflow.CreateKitchenOrderTicketAsync(order.Id, fixture.UserId);
+        await fixture.Workflow.HoldTakeawayAsync(order.Id, fixture.UserId);
+
+        Assert.Equal(order.Id, (await fixture.Workflow.GetOpenTakeawayOrdersAsync()).Single().Id);
+        var reopened = await fixture.Workflow.OpenTakeawayAsync(order.Id, fixture.UserId);
+        var latest = await fixture.Workflow.GetLatestKitchenOrderTicketAsync(reopened.Id, fixture.UserId);
+
+        Assert.Equal(ticket.Id, latest?.Id);
+        Assert.False(await fixture.Workflow.HasPendingKitchenOrderTicketItemsAsync(reopened.Id, fixture.UserId));
+    }
+
     private sealed class WorkflowFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;

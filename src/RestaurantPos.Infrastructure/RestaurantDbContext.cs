@@ -15,6 +15,8 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<KitchenOrderTicket> KitchenOrderTickets => Set<KitchenOrderTicket>();
+    public DbSet<KitchenOrderTicketLine> KitchenOrderTicketLines => Set<KitchenOrderTicketLine>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -34,6 +36,17 @@ public sealed class RestaurantDbContext(DbContextOptions<RestaurantDbContext> op
         });
         b.Entity<OrderLine>(e => { e.Ignore(x => x.PreparationActionLabel); e.Property(x => x.ItemName).HasMaxLength(120).IsRequired(); e.Property(x => x.UnitPrice).HasPrecision(18, 2); e.Property(x => x.GstRate).HasPrecision(5, 2); e.Property(x => x.Quantity).HasPrecision(10, 2); e.Property(x => x.DiscountValue).HasPrecision(18, 2); e.Property(x => x.TaxAmount).HasPrecision(18, 2); e.Property(x => x.LineTotal).HasPrecision(18, 2); e.HasOne(x => x.Order).WithMany(x => x.Lines).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<Payment>(e => { e.Property(x => x.Amount).HasPrecision(18, 2); e.Property(x => x.Reference).HasMaxLength(100); e.HasOne(x => x.Order).WithMany(x => x.Payments).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade); });
+        b.Entity<KitchenOrderTicket>(e =>
+        {
+            e.Ignore(x => x.CreatedLocal); e.Property(x => x.TicketNumber).HasMaxLength(60).IsRequired(); e.HasIndex(x => x.TicketNumber).IsUnique(); e.HasIndex(x => new { x.OrderId, x.SequenceNumber }).IsUnique();
+            e.HasOne(x => x.Order).WithMany(x => x.KitchenOrderTickets).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<KitchenOrderTicketLine>(e =>
+        {
+            e.Property(x => x.ItemName).HasMaxLength(120).IsRequired(); e.Property(x => x.Quantity).HasPrecision(10, 2); e.HasIndex(x => x.SourceOrderLineId);
+            e.HasOne(x => x.KitchenOrderTicket).WithMany(x => x.Lines).HasForeignKey(x => x.KitchenOrderTicketId).OnDelete(DeleteBehavior.Cascade);
+        });
         b.Entity<AuditEntry>(e => { e.Property(x => x.EntityType).HasMaxLength(80).IsRequired(); e.Property(x => x.EntityId).HasMaxLength(80).IsRequired(); e.Property(x => x.Detail).HasMaxLength(500).IsRequired(); e.HasIndex(x => new { x.EntityType, x.EntityId }); e.HasIndex(x => x.OccurredUtc); });
         b.Entity<RestaurantSettings>(e => e.Property(x => x.GstRate).HasPrecision(5, 2));
     }

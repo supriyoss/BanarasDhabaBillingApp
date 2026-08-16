@@ -1,6 +1,7 @@
 using RestaurantPos.Application;
 using RestaurantPos.Desktop;
 using RestaurantPos.Domain;
+using System.Windows.Documents;
 using Xunit;
 
 namespace RestaurantPos.Tests;
@@ -42,6 +43,29 @@ public sealed class PatchReleaseTests
 
         Assert.True(longHeight > shortHeight);
         Assert.StartsWith("%PDF-1.4", System.Text.Encoding.Latin1.GetString(pdf));
+    }
+
+    [Fact]
+    public void KotDocument_IsPriceFreeAndContainsKitchenContext()
+    {
+        var order = ReceiptOrder(1);
+        order.ServerName = "Amit";
+        var ticket = new KitchenOrderTicket
+        {
+            TicketNumber = "KOT-TEST-01",
+            Order = order,
+            Lines = new List<KitchenOrderTicketLine> { new() { ItemName = "Menu item 1", Quantity = 2, PreparationMode = PreparationMode.DineIn } }
+        };
+
+        var document = WpfKitchenOrderTicketPrinter.BuildDocument(ticket, 302, 800);
+        var text = new TextRange(document.ContentStart, document.ContentEnd).Text;
+
+        Assert.Contains("KITCHEN ORDER TICKET", text);
+        Assert.Contains("KOT-TEST-01", text);
+        Assert.Contains("Menu item 1", text);
+        Assert.Contains("Amit", text);
+        Assert.DoesNotContain("Amount", text);
+        Assert.DoesNotContain("210.00", text);
     }
 
     [Fact]

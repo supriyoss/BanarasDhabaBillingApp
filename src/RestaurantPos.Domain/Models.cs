@@ -5,7 +5,7 @@ public enum OrderType { DineIn, Takeaway }
 public enum OrderStatus { Open, Held, Paid, Cancelled }
 public enum PaymentMethod { Cash, Card, Upi, Split }
 public enum DiscountType { None, Percentage, FixedAmount }
-public enum AuditAction { Created, Updated, Held, Resumed, Paid, Reprinted, Cancelled, Login }
+public enum AuditAction { Created, Updated, Held, Resumed, Paid, Reprinted, Cancelled, Login, KitchenTicketCreated, KitchenTicketPrinted }
 public enum TableShape { Square, Rectangle, Round }
 public enum PreparationMode { DineIn, Packed }
 
@@ -118,6 +118,7 @@ public sealed class Order
     public decimal GrandTotal { get; set; }
     public ICollection<OrderLine> Lines { get; set; } = new List<OrderLine>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<KitchenOrderTicket> KitchenOrderTickets { get; set; } = new List<KitchenOrderTicket>();
 }
 
 public sealed class OrderLine
@@ -147,6 +148,34 @@ public sealed class Payment
     public decimal Amount { get; set; }
     public string? Reference { get; set; }
     public DateTime PaidUtc { get; set; } = DateTime.UtcNow;
+}
+
+public sealed class KitchenOrderTicket
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public Order? Order { get; set; }
+    public string TicketNumber { get; set; } = string.Empty;
+    public int SequenceNumber { get; set; }
+    public bool IsSupplementary { get; set; }
+    public int CreatedByUserId { get; set; }
+    public AppUser? CreatedByUser { get; set; }
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedLocal => RestaurantTime.ToLocal(CreatedUtc);
+    public int PrintCount { get; set; }
+    public DateTime? LastPrintedUtc { get; set; }
+    public ICollection<KitchenOrderTicketLine> Lines { get; set; } = new List<KitchenOrderTicketLine>();
+}
+
+public sealed class KitchenOrderTicketLine
+{
+    public int Id { get; set; }
+    public int KitchenOrderTicketId { get; set; }
+    public KitchenOrderTicket? KitchenOrderTicket { get; set; }
+    public int SourceOrderLineId { get; set; }
+    public string ItemName { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public PreparationMode PreparationMode { get; set; }
 }
 
 public sealed class AuditEntry

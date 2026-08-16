@@ -41,7 +41,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Controls.Button diningNavButton = new() { Content = "DINE-IN" };
     private IReadOnlyList<FloorPlanView> diningLayouts = [];
     private readonly System.Windows.Controls.Button preparationModeButton = new() { Content = "Mark selected as Packed" };
-    private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Save open takeaway", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Button sendKotButton = new() { Content = "Send KOT", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Button reprintKotButton = new() { Content = "Reprint last KOT", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Button holdTakeawayButton = new() { Content = "Send KOT", Visibility = Visibility.Collapsed };
+    private readonly System.Windows.Controls.Button saveReopenedTakeawayButton = new() { Content = "Save changes", Visibility = Visibility.Collapsed };
     private readonly System.Windows.Controls.Button updateServerNameButton = new() { Content = "Update server", Visibility = Visibility.Collapsed };
     private FrameworkElement? serverNameEditorRow;
     private readonly System.Windows.Controls.TextBlock orderContextBanner = new() { FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(30, 58, 138)), Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 9) };
@@ -55,6 +58,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private ReceiptPaperWidth configuredReceiptPaperWidth = ReceiptPaperWidth.Mm80;
     private SalesReportPeriod selectedReportPeriod = SalesReportPeriod.Daily;
     private bool invoicePrintedForCurrentOrder;
+    private bool isReopenedTakeaway;
+    private KitchenOrderTicket? latestKitchenOrderTicket;
     private List<MenuItem> menuItems = [];
     public bool HasActiveOrder => currentOrder?.Status == OrderStatus.Open || pendingOrderType is not null;
     public bool HasPaidOrder => currentOrder?.Status == OrderStatus.Paid;
@@ -66,12 +71,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         InitializeComponent(); this.scopeFactory = scopeFactory; this.session = session; this.backupScheduler = backupScheduler; DataContext = this;
         MenuGrid.MouseDoubleClick += MenuGrid_DoubleClick;
         if (TableSelectionPanel.Parent is FrameworkElement legacyOrderStartPanel) legacyOrderStartPanel.Visibility = Visibility.Collapsed;
-        HeldOrdersNavButton.Content = "Open takeaways";
+        HeldOrdersNavButton.Content = "Open Takeaways";
         UpdateTakeawayQueueLabels();
         if (PosNavButton.Parent is System.Windows.Controls.Panel primaryNavigation) primaryNavigation.Children.Remove(PosNavButton);
         if (LeaveOrderButton.Parent is System.Windows.Controls.Panel orderActions)
         {
-            holdTakeawayButton.Click += HoldTakeaway_Click; orderActions.Children.Add(holdTakeawayButton);
+            sendKotButton.Style = (Style)FindResource("PrimaryButton"); sendKotButton.Click += SendKot_Click; orderActions.Children.Add(sendKotButton);
+            reprintKotButton.Click += ReprintLastKot_Click; orderActions.Children.Add(reprintKotButton);
+            holdTakeawayButton.Style = (Style)FindResource("PrimaryButton"); holdTakeawayButton.Click += HoldTakeaway_Click; orderActions.Children.Add(holdTakeawayButton);
+            saveReopenedTakeawayButton.Click += SaveReopenedTakeaway_Click; orderActions.Children.Add(saveReopenedTakeawayButton);
             preparationModeButton.Click += TogglePacked_Click; orderActions.Children.Add(preparationModeButton);
             var cancel = new System.Windows.Controls.Button { Content = "Cancel order" }; cancel.Click += CancelOrder_Click; orderActions.Children.Add(cancel);
         }
@@ -588,8 +596,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             using var scope = scopeFactory.CreateScope();
             var table = await scope.ServiceProvider.GetRequiredService<RestaurantDbContext>().DiningTables.Include(x => x.FloorLayout).SingleAsync(x => x.Id == tableId);
             selectedTableLabel = table.FloorLayout is null ? table.Name : $"{table.FloorLayout.Name} • {table.Name}";
-            currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
-                .FindActiveTableOrderAsync(tableId, session.CurrentUser!.Id);
+            var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>();
+            currentOrder = await workflow.FindActiveTableOrderAsync(tableId, session.CurrentUser!.Id);
+            latestKitchenOrderTicket = currentOrder is null ? null : await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id);
             ServerNameInput.Text = currentOrder?.ServerName ?? string.Empty;
             pendingOrderType = currentOrder is null ? OrderType.DineIn : null; pendingTableId = currentOrder is null ? tableId : null;
             invoicePrintedForCurrentOrder = false;
@@ -609,7 +618,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         DineInButton.Style = (Style)FindResource("CompactAction");
         TakeawayButton.Style = (Style)FindResource("PrimaryButton");
         ServerNameInput.Clear();
-        currentOrder = null; pendingOrderType = OrderType.Takeaway; pendingTableId = null; selectedTableLabel = null; ShowScreen(PosScreen); RefreshOrder("New takeaway. Add the first item to start the order.");
+        currentOrder = null; pendingOrderType = OrderType.Takeaway; pendingTableId = null; selectedTableLabel = null; isReopenedTakeaway = false; ShowScreen(PosScreen); RefreshOrder("New takeaway. Add the first item to start the order.");
         return Task.CompletedTask;
     }
     private async Task LoadHeldOrdersAsync()
@@ -623,7 +632,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async Task ResumeSelectedHeldOrderAsync()
     {
         if (HeldOrdersGrid.SelectedItem is not Order order) return;
-        try { using var scope = scopeFactory.CreateScope(); currentOrder = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().OpenTakeawayAsync(order.Id, session.CurrentUser!.Id); ServerNameInput.Text = currentOrder.ServerName; invoicePrintedForCurrentOrder = false; ShowScreen(PosScreen); RefreshOrder("Takeaway order opened."); }
+        try { using var scope = scopeFactory.CreateScope(); var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>(); currentOrder = await workflow.OpenTakeawayAsync(order.Id, session.CurrentUser!.Id); latestKitchenOrderTicket = await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id); ServerNameInput.Text = currentOrder.ServerName; invoicePrintedForCurrentOrder = false; isReopenedTakeaway = true; ShowScreen(PosScreen); RefreshOrder("Takeaway order opened. Save changes to return it to Open Takeaways."); }
         catch (Exception ex) { ShowError(ex); }
     }
 
@@ -863,6 +872,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; RefreshOrder("No order was created."); ShowScreen(HomeScreen); return; }
         if (currentOrder.Status != OrderStatus.Open) return;
+        if (!await EnsureKotIsCurrentAsync()) return;
         if (currentOrder.Type == OrderType.DineIn)
         {
             currentOrder = null;
@@ -885,19 +895,125 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void Pay_Click(object sender, RoutedEventArgs e)
     {
         if (currentOrder is null) return;
+        if (!await EnsureKotIsCurrentAsync()) return;
         await ApplyAsync(w => w.TakePaymentAsync(currentOrder.Id, selectedPaymentMethod, currentOrder.GrandTotal, session.CurrentUser!.Id), "Payment recorded.");
         if (currentOrder?.Status != OrderStatus.Paid) return;
         var paidOrder = currentOrder;
         var printMessage = await PrintReceiptAsync(paidOrder, false);
         lastPaidOrder = paidOrder;
         LastReceiptText.Text = $"{paidOrder.InvoiceNumber} • {paidOrder.GrandTotal:N2}";
-        currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; invoicePrintedForCurrentOrder = false;
+        currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; invoicePrintedForCurrentOrder = false; isReopenedTakeaway = false;
         RefreshOrder(string.Empty); ShowScreen(HomeScreen);
         HomeStaffText.Text = $"{printMessage} Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
     }
     private async void HoldTakeaway_Click(object sender, RoutedEventArgs e)
     {
-        if (currentOrder?.Type != OrderType.Takeaway) return; await ApplyAsync(w => w.HoldTakeawayAsync(currentOrder.Id, session.CurrentUser!.Id), "Takeaway saved open."); currentOrder = null; RefreshOrder("Takeaway is available in Open takeaways."); ShowScreen(HomeScreen);
+        if (currentOrder?.Type != OrderType.Takeaway || currentOrder.Status != OrderStatus.Open) return;
+        holdTakeawayButton.IsEnabled = false;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>();
+            var (ticket, printed) = await CreateAndPrintPendingKotAsync(scope.ServiceProvider, workflow);
+            if (ticket is not null && !printed)
+            {
+                RefreshOrder($"{ticket.TicketNumber} was created, but printing was cancelled. Send KOT again to retry.");
+                return;
+            }
+            currentOrder = await workflow.HoldTakeawayAsync(currentOrder.Id, session.CurrentUser!.Id);
+            currentOrder = null;
+            isReopenedTakeaway = false;
+            RefreshOrder("Takeaway is available in Open Takeaways.");
+            ShowScreen(HomeScreen);
+            HomeStaffText.Text = ticket is null
+                ? "Takeaway returned to Open Takeaways; there were no new kitchen items."
+                : $"{ticket.TicketNumber} sent to the kitchen and the order moved to Open Takeaways.";
+        }
+        catch (Exception ex) { ShowError(ex); }
+        finally { holdTakeawayButton.IsEnabled = currentOrder?.Type == OrderType.Takeaway && currentOrder.Status == OrderStatus.Open; }
+    }
+    private async void SaveReopenedTakeaway_Click(object sender, RoutedEventArgs e)
+    {
+        if (!isReopenedTakeaway || currentOrder?.Type != OrderType.Takeaway || currentOrder.Status != OrderStatus.Open) return;
+        if (!await EnsureKotIsCurrentAsync()) return;
+        saveReopenedTakeawayButton.IsEnabled = false;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().HoldTakeawayAsync(currentOrder.Id, session.CurrentUser!.Id);
+            currentOrder = null;
+            isReopenedTakeaway = false;
+            RefreshOrder("Takeaway changes saved.");
+            ShowScreen(HomeScreen);
+            HomeStaffText.Text = $"Takeaway changes saved in Open Takeaways. Signed in as {session.CurrentUser!.DisplayName} ({session.CurrentUser.Role}).";
+        }
+        catch (Exception ex) { ShowError(ex); }
+        finally { saveReopenedTakeawayButton.IsEnabled = isReopenedTakeaway && currentOrder?.Status == OrderStatus.Open; }
+    }
+    private async void SendKot_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentOrder?.Status != OrderStatus.Open) return;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>();
+            var (ticket, printed) = await CreateAndPrintPendingKotAsync(scope.ServiceProvider, workflow);
+            RefreshOrder(ticket is null
+                ? "There are no new or increased items to send to the kitchen."
+                : printed ? $"{ticket.TicketNumber} sent to the kitchen." : $"{ticket.TicketNumber} created; printing was cancelled. Use Reprint last KOT.");
+        }
+        catch (Exception ex) { ShowError(ex); }
+    }
+    private async Task<(KitchenOrderTicket? Ticket, bool Printed)> CreateAndPrintPendingKotAsync(IServiceProvider services, IOrderWorkflow workflow)
+    {
+        if (currentOrder is null) return (null, false);
+        var hasPendingItems = await workflow.HasPendingKitchenOrderTicketItemsAsync(currentOrder.Id, session.CurrentUser!.Id);
+        var ticket = hasPendingItems
+            ? await workflow.CreateKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id)
+            : await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id);
+        if (ticket is null || ticket.PrintCount > 0) return (null, false);
+        latestKitchenOrderTicket = ticket;
+        var printed = await services.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(ticket, SelectedReceiptPaperWidth);
+        if (printed) await workflow.RecordKitchenOrderTicketPrintAsync(ticket.Id, session.CurrentUser.Id);
+        return (ticket, printed);
+    }
+    private async void ReprintLastKot_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentOrder is null) return;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var workflow = scope.ServiceProvider.GetRequiredService<IOrderWorkflow>();
+            latestKitchenOrderTicket ??= await workflow.GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser!.Id);
+            if (latestKitchenOrderTicket is null) { StatusText.Text = "Send the first KOT before reprinting."; return; }
+            var printed = await scope.ServiceProvider.GetRequiredService<IKitchenOrderTicketPrinter>().PrintAsync(latestKitchenOrderTicket, SelectedReceiptPaperWidth);
+            if (printed) await workflow.RecordKitchenOrderTicketPrintAsync(latestKitchenOrderTicket.Id, session.CurrentUser!.Id);
+            StatusText.Text = printed ? $"{latestKitchenOrderTicket.TicketNumber} reprinted." : "KOT reprint cancelled.";
+        }
+        catch (Exception ex) { ShowError(ex); }
+    }
+    private async Task<bool> EnsureKotIsCurrentAsync()
+    {
+        if (currentOrder?.Status != OrderStatus.Open || currentOrder.Lines.Count == 0) return true;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var hasPendingItems = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
+                .HasPendingKitchenOrderTicketItemsAsync(currentOrder.Id, session.CurrentUser!.Id);
+            if (!hasPendingItems)
+            {
+                latestKitchenOrderTicket = await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()
+                    .GetLatestKitchenOrderTicketAsync(currentOrder.Id, session.CurrentUser.Id);
+                if (latestKitchenOrderTicket is null || latestKitchenOrderTicket.PrintCount > 0) return true;
+                StatusText.Text = $"Print {latestKitchenOrderTicket.TicketNumber} before saving or completing this order.";
+                return false;
+            }
+            StatusText.Text = latestKitchenOrderTicket is null
+                ? "Send the KOT before saving or completing this order."
+                : "Send a supplementary KOT for the new or increased items first.";
+            return false;
+        }
+        catch (Exception ex) { ShowError(ex); return false; }
     }
     private async void TogglePacked_Click(object sender, RoutedEventArgs e) { if (currentOrder?.Type != OrderType.DineIn || CartGrid.SelectedItem is not OrderLine line) return; var mode = line.PreparationMode == PreparationMode.Packed ? PreparationMode.DineIn : PreparationMode.Packed; await ApplyAsync(w => w.SetLinePreparationModeAsync(currentOrder.Id, line.Id, mode, session.CurrentUser!.Id), $"{line.ItemName} marked {mode}."); UpdatePreparationAction(); }
     private void UpdatePreparationAction() { preparationModeButton.Visibility = currentOrder?.Type == OrderType.DineIn ? Visibility.Visible : Visibility.Collapsed; preparationModeButton.Content = CartGrid.SelectedItem is OrderLine { PreparationMode: PreparationMode.Packed } ? "Mark selected as Dine-In" : "Mark selected as Packed"; }
@@ -911,7 +1027,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             var wasDineIn = currentOrder.Type == OrderType.DineIn;
             using var scope = scopeFactory.CreateScope(); await scope.ServiceProvider.GetRequiredService<IOrderWorkflow>().CancelAsync(currentOrder.Id, session.CurrentUser!.Id);
-            currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; RefreshOrder("Order cancelled.");
+            currentOrder = null; pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; isReopenedTakeaway = false; RefreshOrder("Order cancelled.");
             if (wasDineIn) { await LoadDiningFloorAsync(); ShowScreen(diningScreen); } else ShowScreen(HomeScreen);
         }
         catch (Exception ex) { ShowError(ex); }
@@ -958,6 +1074,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async Task ApplyAsync(Func<IOrderWorkflow, Task<Order>> action, string message) { try { using var scope = scopeFactory.CreateScope(); currentOrder = await action(scope.ServiceProvider.GetRequiredService<IOrderWorkflow>()); RefreshOrder(message); } catch (Exception ex) { ShowError(ex); } }
     private void RefreshOrder(string message)
     {
+        if (currentOrder is null) latestKitchenOrderTicket = null;
         CartGrid.ItemsSource = currentOrder?.Lines.ToList();
         var isTakeaway = currentOrder?.Type == OrderType.Takeaway || pendingOrderType == OrderType.Takeaway;
         var dineInLabel = selectedTableLabel ?? currentOrder?.DiningTable?.Name ?? "Selected table";
@@ -969,6 +1086,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         updateServerNameButton.Visibility = currentOrder?.Status == OrderStatus.Open ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.Visibility = isTakeaway ? Visibility.Visible : Visibility.Collapsed;
         holdTakeawayButton.IsEnabled = currentOrder?.Type == OrderType.Takeaway && currentOrder.Status == OrderStatus.Open;
+        saveReopenedTakeawayButton.Visibility = isReopenedTakeaway && currentOrder?.Type == OrderType.Takeaway ? Visibility.Visible : Visibility.Collapsed;
+        saveReopenedTakeawayButton.IsEnabled = isReopenedTakeaway && currentOrder?.Status == OrderStatus.Open;
+        sendKotButton.Visibility = currentOrder is { Status: OrderStatus.Open, Type: OrderType.DineIn } ? Visibility.Visible : Visibility.Collapsed;
+        sendKotButton.IsEnabled = currentOrder?.Lines.Count > 0;
+        reprintKotButton.Visibility = currentOrder is not null && latestKitchenOrderTicket is not null ? Visibility.Visible : Visibility.Collapsed;
         LeaveOrderButton.Content = currentOrder?.Type == OrderType.DineIn ? "Return to floor plan" : "Return to home";
         BillDiscountTotalText.Text = currentOrder is null ? string.Empty : currentOrder.DiscountAmount.ToString("N2", CultureInfo.CurrentCulture);
         GstTotalText.Text = currentOrder is null ? string.Empty : currentOrder.TaxAmount.ToString("N2", CultureInfo.CurrentCulture);
