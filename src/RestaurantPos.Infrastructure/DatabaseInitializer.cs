@@ -10,7 +10,7 @@ public sealed class DatabaseInitializer(RestaurantDbContext db, PinHasher pinHas
         await db.Database.MigrateAsync(cancellationToken);
         await db.Orders.Where(x => x.Status == OrderStatus.Held).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, OrderStatus.Open), cancellationToken);
         var changed = false;
-        if (!await db.RestaurantSettings.AnyAsync(cancellationToken)) { db.RestaurantSettings.Add(new RestaurantSettings { Id = 1, GstRate = 5m }); changed = true; }
+        if (!await db.RestaurantSettings.AnyAsync(cancellationToken)) { db.RestaurantSettings.Add(new RestaurantSettings { Id = 1, GstRate = 5m, ReceiptPaperWidthMm = 80 }); changed = true; }
 
         var builtInUsers = await db.Users.Where(x => x.DisplayName == "Administrator" || x.DisplayName == "Manager").ToListAsync(cancellationToken);
         var administrator = builtInUsers.SingleOrDefault(x => x.DisplayName == "Administrator");

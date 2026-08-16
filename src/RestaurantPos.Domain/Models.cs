@@ -90,6 +90,7 @@ public sealed class RestaurantSettings
 {
     public int Id { get; set; }
     public decimal GstRate { get; set; } = 5m;
+    public int ReceiptPaperWidthMm { get; set; } = 80;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 }
 

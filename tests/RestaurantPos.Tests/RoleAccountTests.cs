@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using RestaurantPos.Application;
 using RestaurantPos.Domain;
 using RestaurantPos.Infrastructure;
 using Xunit;
@@ -40,6 +41,24 @@ public sealed class RoleAccountTests
         await fixture.Service.ResetStaffPinAsync(account.Id, "8910", fixture.ActorId);
 
         Assert.True(new PinHasher().Verify("8910", account.PinHash));
+    }
+
+    [Fact]
+    public async Task Manager_CanPersistPhysicalReceiptPaperWidth()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Manager);
+
+        await fixture.Service.UpdateReceiptPaperWidthAsync(ReceiptPaperWidth.Mm58, fixture.ActorId);
+
+        Assert.Equal(58, (await fixture.Service.GetSettingsAsync()).ReceiptPaperWidthMm);
+    }
+
+    [Fact]
+    public async Task PhysicalReceiptPaperWidth_RejectsUnsupportedValues()
+    {
+        await using var fixture = await Fixture.CreateAsync(UserRole.Manager);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.UpdateReceiptPaperWidthAsync((ReceiptPaperWidth)70, fixture.ActorId));
     }
 
     private sealed class Fixture : IAsyncDisposable

@@ -1,0 +1,89 @@
+<Window x:Class="RestaurantPos.Desktop.OrderCancellationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cancel order"
+        Width="480"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        AllowsTransparency="True"
+        Background="Transparent">
+  <Window.Resources>
+    <Style x:Key="DestructiveDialogButton" TargetType="Button">
+      <Setter Property="Background" Value="#DC2626"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderBrush" Value="#DC2626"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#B91C1C"/><Setter TargetName="Surface" Property="BorderBrush" Value="#B91C1C"/></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Background" Value="#991B1B"/><Setter TargetName="Surface" Property="BorderBrush" Value="#991B1B"/></Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#172033"/><Setter TargetName="Surface" Property="BorderThickness" Value="2"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border Margin="20"
+          Padding="24"
+          Background="White"
+          BorderBrush="#E2E8F0"
+          BorderThickness="1"
+          CornerRadius="14">
+    <Border.Effect>
+      <DropShadowEffect BlurRadius="28" ShadowDepth="8" Opacity="0.24" Color="#0F172A"/>
+    </Border.Effect>
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Width="44" Height="44" Background="#FFF7ED" CornerRadius="22" VerticalAlignment="Top">
+          <TextBlock Text="!" Foreground="#C2410C" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <StackPanel Grid.Column="1" Margin="16,0,0,0">
+          <TextBlock Text="Cancel this order?" FontSize="22" FontWeight="SemiBold" Foreground="#172033"/>
+          <TextBlock x:Name="OrderContextText" Margin="0,5,0,0" Foreground="#475569" FontSize="14" TextWrapping="Wrap"/>
+        </StackPanel>
+      </Grid>
+
+      <Border Grid.Row="1" Margin="0,20,0,0" Padding="14" Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1" CornerRadius="9">
+        <TextBlock Text="Cancelling will close the running order. This action cannot be undone." Foreground="#9A3412" TextWrapping="Wrap"/>
+      </Border>
+
+      <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+        <Button x:Name="KeepOrderButton"
+                Content="Keep order"
+                MinWidth="112"
+                Padding="16,9"
+                Margin="0,0,8,0"
+                IsDefault="True"
+                IsCancel="True"
+                AutomationProperties.Name="Keep the order"/>
+        <Button Style="{StaticResource DestructiveDialogButton}"
+                Content="Cancel order"
+                MinWidth="124"
+                Padding="16,9"
+                AutomationProperties.Name="Permanently cancel the order"
+                Click="ConfirmCancellation_Click"/>
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

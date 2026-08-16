@@ -16,6 +16,7 @@ public interface IAdministrationService
     Task<int> DeactivateStaffAccountsAsync(IReadOnlyCollection<int> userIds, int performedByUserId, CancellationToken cancellationToken = default);
     Task<RestaurantSettings> GetSettingsAsync(CancellationToken cancellationToken = default);
     Task UpdateGstRateAsync(decimal gstRate, int performedByUserId, CancellationToken cancellationToken = default);
+    Task UpdateReceiptPaperWidthAsync(ReceiptPaperWidth paperWidth, int performedByUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default);
 }
 

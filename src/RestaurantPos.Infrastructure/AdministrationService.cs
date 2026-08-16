@@ -102,6 +102,16 @@ public sealed class AdministrationService(RestaurantDbContext db, PinHasher pinH
         db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "RestaurantSettings", EntityId = "GST", Detail = $"Updated bill GST rate to {gstRate:N2}%." });
         await db.SaveChangesAsync(cancellationToken);
     }
+    public async Task UpdateReceiptPaperWidthAsync(ReceiptPaperWidth paperWidth, int performedByUserId, CancellationToken cancellationToken = default)
+    {
+        await EnsureRestaurantManagerAsync(performedByUserId, cancellationToken);
+        if (paperWidth is not (ReceiptPaperWidth.Mm58 or ReceiptPaperWidth.Mm80)) throw new InvalidOperationException("Choose either 58 mm or 80 mm receipt paper.");
+        var settings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1, cancellationToken);
+        settings.ReceiptPaperWidthMm = (int)paperWidth;
+        settings.UpdatedUtc = DateTime.UtcNow;
+        db.AuditEntries.Add(new AuditEntry { UserId = performedByUserId, Action = AuditAction.Updated, EntityType = "RestaurantSettings", EntityId = "ReceiptPaper", Detail = $"Updated physical receipt paper width to {(int)paperWidth} mm." });
+        await db.SaveChangesAsync(cancellationToken);
+    }
     public async Task<IReadOnlyList<Order>> GetOrderHistoryAsync(DateTime fromDate, CancellationToken cancellationToken = default)
     {
         var start = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Local).ToUniversalTime();

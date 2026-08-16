@@ -47,6 +47,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool choosingDineIn;
     private DiscountType selectedDiscountType = DiscountType.Percentage;
     private PaymentMethod selectedPaymentMethod = PaymentMethod.Cash;
+    private ReceiptPaperWidth configuredReceiptPaperWidth = ReceiptPaperWidth.Mm80;
     private SalesReportPeriod selectedReportPeriod = SalesReportPeriod.Daily;
     private bool invoicePrintedForCurrentOrder;
     private List<MenuItem> menuItems = [];
@@ -131,6 +132,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ApplyMenuFilter();
         menuCategoryFilter.ItemsSource = new[] { new MenuCategory { Id = 0, Name = "All categories" } }.Concat(menuItems.Select(x => x.MenuCategory!).DistinctBy(x => x.Id)).ToList(); menuCategoryFilter.SelectedIndex = 0;
         TableSelector.ItemsSource = await db.DiningTables.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
+        var restaurantSettings = await db.RestaurantSettings.SingleAsync(x => x.Id == 1);
+        configuredReceiptPaperWidth = restaurantSettings.ReceiptPaperWidthMm == 58 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
+        ReceiptPaperSelector.SelectedIndex = configuredReceiptPaperWidth == ReceiptPaperWidth.Mm58 ? 0 : 1;
         SelectDiscountType(DiscountType.Percentage);
         SelectPaymentMethod(PaymentMethod.Cash);
         BusinessDate.SelectedDate = DateTime.Today;
@@ -587,7 +591,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             using var scope = scopeFactory.CreateScope(); var admin = scope.ServiceProvider.GetRequiredService<IAdministrationService>();
             StaffGrid.ItemsSource = await admin.GetStaffAsync();
             managementCategorySelector.ItemsSource = await admin.GetCategoriesAsync();
-            GstRateInput.Text = (await admin.GetSettingsAsync()).GstRate.ToString("0.##", CultureInfo.CurrentCulture);
+            var settings = await admin.GetSettingsAsync();
+            GstRateInput.Text = settings.GstRate.ToString("0.##", CultureInfo.CurrentCulture);
+            configuredReceiptPaperWidth = settings.ReceiptPaperWidthMm == 58 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
+            ReceiptPaperSelector.SelectedIndex = configuredReceiptPaperWidth == ReceiptPaperWidth.Mm58 ? 0 : 1;
+            ReceiptPaperStatusText.Text = $"Saved setting: {(int)configuredReceiptPaperWidth} mm";
             if (managementCategorySelector.SelectedIndex < 0) managementCategorySelector.SelectedIndex = 0;
             await LoadHistoryAsync(admin);
         }
@@ -701,6 +709,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex) { AdminStatusText.Text = ex.Message; }
     }
+    private async void ApplyReceiptPaperWidth_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var paperWidth = ReceiptPaperSelector.SelectedIndex == 0 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
+            using var scope = scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IAdministrationService>().UpdateReceiptPaperWidthAsync(paperWidth, session.CurrentUser!.Id);
+            configuredReceiptPaperWidth = paperWidth;
+            ReceiptPaperStatusText.Text = $"Saved setting: {(int)paperWidth} mm";
+            AdminStatusText.Text = "Physical receipt paper setting updated.";
+        }
+        catch (Exception ex) { ReceiptPaperStatusText.Text = ex.Message; }
+    }
     private async void LoadHistory_Click(object sender, RoutedEventArgs e)
     {
         try { using var scope = scopeFactory.CreateScope(); await LoadHistoryAsync(scope.ServiceProvider.GetRequiredService<IAdministrationService>()); }
@@ -803,7 +824,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (currentOrder is null) { pendingOrderType = null; pendingTableId = null; selectedTableLabel = null; ShowScreen(HomeScreen); return; }
         var context = currentOrder.Type == OrderType.DineIn ? selectedTableLabel ?? currentOrder.DiningTable?.Name ?? "this table" : "this takeaway order";
-        if (MessageBox.Show(this, $"Cancel {context}?\n\nThis will close the running order and cannot be undone.", "Confirm order cancellation", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        var confirmation = new OrderCancellationDialog($"You are about to cancel {context}.") { Owner = this };
+        if (confirmation.ShowDialog() != true) return;
         try
         {
             var wasDineIn = currentOrder.Type == OrderType.DineIn;
@@ -824,7 +846,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         UpiPaymentButton.Style = (Style)FindResource(method == PaymentMethod.Upi ? "PrimaryButton" : "CompactAction");
     }
     private async void Reprint_Click(object sender, RoutedEventArgs e) { if (currentOrder is not null) await PrintReceiptAsync(currentOrder, true); }
-    private ReceiptPaperWidth SelectedReceiptPaperWidth => ReceiptPaperSelector.SelectedIndex == 0 ? ReceiptPaperWidth.Mm58 : ReceiptPaperWidth.Mm80;
+    private ReceiptPaperWidth SelectedReceiptPaperWidth => configuredReceiptPaperWidth;
     private async Task<string> PrintReceiptAsync(Order order, bool isReprint)
     {
         try

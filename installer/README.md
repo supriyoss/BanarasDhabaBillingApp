@@ -13,7 +13,7 @@ The database, logs, and backups remain under `%LocalAppData%\RestaurantPos`, so 
 Run these commands from the repository root in PowerShell. Set `$releaseVersion` to the version already recorded in both `RestaurantPos.Desktop.csproj` and `RestaurantPos.wxs`.
 
 ```powershell
-$releaseVersion = "3.7.0"
+$releaseVersion = "3.7.5"
 $repositoryRoot = (Resolve-Path ".").Path
 $releaseDirectory = Join-Path $repositoryRoot "artifacts\release-v$releaseVersion"
 $publishDirectory = Join-Path $releaseDirectory "publish"
